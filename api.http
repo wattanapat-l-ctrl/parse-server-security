@@ -1,0 +1,292 @@
+### ============================================================
+### Parse Server - Security API (ใช้กับ VS Code Extension: "REST Client")
+### รัน: เปิดไฟล์นี้ใน VS Code แล้วกด "Send Request" ใต้แต่ละ request
+### ข้อกำหนด: npm start (เซิร์ฟเวอร์ต้องรันอยู่ที่ localhost:1337)
+### ============================================================
+
+@host = http://localhost:1337
+@parseUrl = {{host}}/parse
+@appId = security-app
+@restKey = REPLACE_WITH_REST_API_KEY
+@masterKey = REPLACE_WITH_MASTER_KEY
+
+### Health Check
+# @name health
+GET {{host}}/health
+
+###
+
+### Health Check (Parse)
+# @name parseHealth
+GET {{parseUrl}}/health
+
+###
+
+### ============================================================
+### AUTH
+### ============================================================
+
+### สมัครผู้ใช้ใหม่ (จะสร้าง _User ใหม่)
+# @name signUp
+POST {{parseUrl}}/users
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+
+{
+  "username": "your-username",
+  "password": "your-password",
+  "email": "you@example.com"
+}
+
+###
+
+### ล็อกอิน
+# @name login
+POST {{parseUrl}}/login
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+
+{
+  "username": "your-username",
+  "password": "your-password"
+}
+
+###
+
+### ล็อกอิน master (ใช้ masterKey - ต้องรันจาก localhost)
+# @name loginMaster
+POST {{parseUrl}}/login
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "username": "your-username",
+  "password": "your-master-password"
+}
+
+###
+
+### ดึงข้อมูล user ปัจจุบัน (ต้องใส่ sessionToken จาก login)
+# @name currentUser
+GET {{parseUrl}}/users/me
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{login.response.body.sessionToken}}
+
+###
+
+### ============================================================
+### SECURITY FUNCTIONS (ต้อง masterKey หรือมี role SecurityAnalyst)
+### ============================================================
+
+### สแกนพอร์ต (TCP connect scan จริง)
+# @name portScan
+POST {{parseUrl}}/functions/runPortScan
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "host": "127.0.0.1",
+  "ports": [22, 80, 443, 1337, 27017, 4040, 8080, 8443],
+  "timeoutMs": 1500
+}
+
+###
+
+### สร้าง Security Alert
+# @name createAlert
+POST {{parseUrl}}/functions/createSecurityAlert
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "severity": "high",
+  "title": "พบการพยายาม brute-force SSH จาก 203.0.113.10",
+  "details": {
+    "sourceIp": "203.0.113.10",
+    "attempts": 142,
+    "service": "ssh"
+  }
+}
+
+###
+
+### รายงานสถานะความปลอดภัย
+# @name securityReport
+POST {{parseUrl}}/functions/getSecurityReport
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{}
+
+###
+
+### กักกันผู้ใช้ (ล็อกบัญชี + ยกเลิก session ทั้งหมด)
+# @name quarantine
+POST {{parseUrl}}/functions/quarantineUser
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "userId": "DCc0OT4yCK",
+  "reason": "ถูกตรวจพบ automated scan"
+}
+
+###
+
+### ปลดล็อกผู้ใช้
+# @name unquarantine
+POST {{parseUrl}}/functions/unquarantineUser
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "userId": "DCc0OT4yCK"
+}
+
+###
+
+### เปลี่ยนสถานะ Alert
+# @name updateAlert
+POST {{parseUrl}}/functions/updateAlertStatus
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "alertId": "4QG9ZoaR3i",
+  "status": "resolved",
+  "note": "ตรวจและแพทช์แล้ว"
+}
+
+###
+
+### ============================================================
+### QUERY (masterKey หรือ session ของเจ้าของ)
+### ============================================================
+
+### ดึง SecurityAlert ทั้งหมด
+# @name queryAlerts
+GET {{parseUrl}}/classes/SecurityAlert
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+###
+
+### ดึง SecurityScan ล่าสุด 10 รายการ
+# @name queryScans
+GET {{parseUrl}}/classes/SecurityScan?order=-createdAt&limit=10
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+###
+
+### ดึง SecurityLog (audit log) ล่าสุด
+# @name queryLogs
+GET {{parseUrl}}/classes/SecurityLog?order=-createdAt&limit=20
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+###
+
+### ============================================================
+### TESTS: ยืนยันว่า security block ทำงาน
+### ============================================================
+
+### [คาดว่าล้มเหลว] client เขียน SecurityLog ตรง ๆ ไม่ผ่าน
+# @name blockLogWrite
+POST {{parseUrl}}/classes/SecurityLog
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+
+{
+  "event": "fake_hack_event",
+  "meta": {}
+}
+
+###
+
+### [คาดว่าล้มเหลว] client สร้าง class ใหม่ (allowClientClassCreation:false)
+# @name blockClassCreation
+POST {{parseUrl}}/classes/NewForbiddenClass
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+
+{
+  "foo": "bar"
+}
+
+###
+
+### [คาดว่าล้มเหลว] masterKey จาก IP ที่ไม่ใช่ localhost (ทดสอบเครื่องอื่น)
+# @name blockMasterKeyFromRemote
+GET {{parseUrl}}/classes/SecurityAlert
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+###
+
+### ออกจากระบบ (revoked session)
+# @name logout
+POST {{parseUrl}}/logout
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{login.response.body.sessionToken}}
+
+{}
+
+###
+
+### ============================================================
+### REST แบบใช้ session token (ใช้คู่กับ role SecurityAnalyst)
+### ============================================================
+
+### รัน port scan โดยใช้ session แทน masterKey
+# @name portScanWithSession
+POST {{parseUrl}}/functions/runPortScan
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Session-Token: {{login.response.body.sessionToken}}
+
+{
+  "host": "127.0.0.1",
+  "ports": [80, 443, 1337],
+  "timeoutMs": 1000
+}
+
+###
+
+### ดึง alert ของ user ปัจจุบัน
+# @name myAlerts
+GET {{parseUrl}}/classes/SecurityAlert
+X-Parse-Application-Id: {{appId}}
+X-Parse-Session-Token: {{login.response.body.sessionToken}}
+
+###
+
+### แก้ profile ตัวเอง
+# @name updateProfile
+PUT {{parseUrl}}/users/{{login.response.body.objectId}}
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{login.response.body.sessionToken}}
+
+{
+  "securityFlags": {
+    "twoFactorEnabled": true
+  }
+}
+
+###
