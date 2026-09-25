@@ -122,9 +122,15 @@ docker compose exec app node examples/demo-security.js
 
 ## ใช้งานผ่าน VS Code REST Client
 
-ติดตั้ง VS Code Extension ชื่อ **REST Client** จากนั้นเปิดไฟล์ `api.http` ใน VS Code
+ติดตั้ง VS Code Extension ชื่อ **REST Client** จากนั้นคัดลอกไฟล์ตัวอย่างเป็นไฟล์ local:
 
-ไฟล์จะอ่าน `APP_ID`, `REST_API_KEY` และ `MASTER_KEY` จากไฟล์ `.env` โดยอัตโนมัติ จึงไม่ต้องแก้ key จริงลงใน `api.http` กด **Send Request** ให้ request ไล่จากบนลงล่างตามลำดับ เพราะบาง request ใช้ผลลัพธ์จาก request ก่อนหน้า
+```powershell
+Copy-Item api.http.simple api.http
+```
+
+เปิด `api.http` ใน VS Code แล้วแก้ค่า `REPLACE_WITH_...` และข้อมูลตัวอย่างให้เป็นค่าของคุณ จากนั้นกด **Send Request** ให้ request ไล่จากบนลงล่างตามลำดับ เพราะบาง request ใช้ผลลัพธ์จาก request ก่อนหน้า
+
+ไฟล์ `api.http` ถูกเพิ่มใน `.gitignore` และไม่ควร commit ลง GitHub ส่วน `api.http.simple` เป็นไฟล์ template ที่ปลอดภัยสำหรับ repository
 
 เริ่มจาก request นี้ก่อน:
 
@@ -134,7 +140,7 @@ GET {{host}}/health
 
 ถ้าเห็น `{"status":"ok"}` แสดงว่า VS Code เชื่อมต่อกับ server ได้แล้ว
 
-request ที่มีคำว่า `[คาดว่าล้มเหลว]` เป็น security tests และควรได้รับการปฏิเสธตามที่ระบุ ไม่ใช่ข้อผิดพลาดของไฟล์ตัวอย่าง ห้าม commit ค่า secret จริงลงใน `api.http`
+request ที่มีคำว่า `[คาดว่าล้มเหลว]` เป็น security tests และควรได้รับการปฏิเสธตามที่ระบุ ไม่ใช่ข้อผิดพลาดของไฟล์ตัวอย่าง
 
 ## ระบบทำอะไรได้บ้าง
 
@@ -194,7 +200,8 @@ MongoDB :27017
 | `Dockerfile` | สร้าง image ของ Parse Server |
 | `.env.example` | ตัวอย่างค่าตั้งค่า |
 | `.env` | ค่าจริงและ secret ของเครื่อง ห้าม commit |
-| `api.http` | ตัวอย่าง REST requests สำหรับ VS Code |
+| `api.http.simple` | ไฟล์ template REST requests ที่ไม่มีค่า secret สำหรับคัดลอกไปใช้งาน |
+| `api.http` | ไฟล์ local สำหรับ REST Client; ถูก ignore และห้าม commit |
 | `tests/verify-all.js` | ชุดทดสอบระบบ 29 รายการ |
 | `examples/demo-security.js` | ตัวอย่างการเรียกใช้ Cloud Functions |
 

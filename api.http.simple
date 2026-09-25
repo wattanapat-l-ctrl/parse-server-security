@@ -1,0 +1,335 @@
+### ============================================================
+### Parse Server - Security API (template สำหรับ VS Code REST Client)
+### คัดลอกไฟล์นี้เป็น api.http ในเครื่อง แล้วกรอกค่า REPLACE_WITH_... ก่อนใช้งาน
+### ห้าม commit ไฟล์ api.http หรือค่า secret จริง
+### ============================================================
+
+@host = http://localhost:1337
+@parseUrl = {{host}}/parse
+@appId = REPLACE_WITH_APP_ID
+@restKey = REPLACE_WITH_REST_API_KEY
+@masterKey = REPLACE_WITH_MASTER_KEY
+
+### Health Check
+# @name health
+GET {{host}}/health
+
+###
+
+### Health Check (Parse)
+# @name parseHealth
+GET {{parseUrl}}/health
+
+###
+
+### ============================================================
+### AUTH
+### ============================================================
+
+### สมัครผู้ใช้ใหม่
+# @name signUp
+POST {{parseUrl}}/users
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+
+{
+  "username": "REPLACE_WITH_USERNAME",
+  "password": "REPLACE_WITH_PASSWORD",
+  "email": "REPLACE_WITH_EMAIL"
+}
+
+###
+
+### ล็อกอินด้วยผู้ใช้ที่สมัครเมื่อกี้
+# @name login
+POST {{parseUrl}}/login
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+
+{
+  "username": "{{signUp.request.body.$.username}}",
+  "password": "{{signUp.request.body.$.password}}"
+}
+
+###
+
+### ล็อกอินด้วย masterKey
+# @name loginMaster
+POST {{parseUrl}}/login
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "username": "{{signUp.request.body.$.username}}",
+  "password": "{{signUp.request.body.$.password}}"
+}
+
+###
+
+### ดึงข้อมูล user ปัจจุบัน
+# @name currentUser
+GET {{parseUrl}}/users/me
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{login.response.body.sessionToken}}
+
+###
+
+### เพิ่มผู้ใช้เข้า role SecurityAnalyst (ใช้ masterKey เท่านั้น)
+# @name assignAnalystRole
+POST {{parseUrl}}/functions/assignSecurityAnalystRole
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "userId": "{{signUp.response.body.objectId}}"
+}
+
+###
+
+### ล็อกอินหลังได้ role
+# @name loginAnalyst
+POST {{parseUrl}}/login
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+
+{
+  "username": "{{signUp.request.body.$.username}}",
+  "password": "{{signUp.request.body.$.password}}"
+}
+
+###
+
+### สร้างผู้ใช้เป้าหมายสำหรับทดสอบ quarantine
+# @name quarantineTarget
+POST {{parseUrl}}/users
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+
+{
+  "username": "REPLACE_WITH_TARGET_USERNAME",
+  "password": "REPLACE_WITH_TARGET_PASSWORD",
+  "email": "REPLACE_WITH_TARGET_EMAIL"
+}
+
+###
+
+### ============================================================
+### SECURITY FUNCTIONS (masterKey หรือ role SecurityAnalyst)
+### ============================================================
+
+### สแกนพอร์ตด้วย masterKey
+# @name portScan
+POST {{parseUrl}}/functions/runPortScan
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "host": "127.0.0.1",
+  "ports": [22, 80, 443, 1337, 27017, 4040, 8080, 8443],
+  "timeoutMs": 1500
+}
+
+###
+
+### สร้าง Security Alert
+# @name createAlert
+POST {{parseUrl}}/functions/createSecurityAlert
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "severity": "high",
+  "title": "REPLACE_WITH_ALERT_TITLE",
+  "details": {
+    "sourceIp": "REPLACE_WITH_SOURCE_IP",
+    "attempts": 0,
+    "service": "REPLACE_WITH_SERVICE"
+  }
+}
+
+###
+
+### รายงานสถานะความปลอดภัย
+# @name securityReport
+POST {{parseUrl}}/functions/getSecurityReport
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{}
+
+###
+
+### เปลี่ยนสถานะ Alert ที่สร้างเมื่อกี้
+# @name updateAlert
+POST {{parseUrl}}/functions/updateAlertStatus
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "alertId": "{{createAlert.response.body.result.objectId}}",
+  "status": "resolved",
+  "note": "REPLACE_WITH_RESOLUTION_NOTE"
+}
+
+###
+
+### กักกันผู้ใช้เป้าหมาย
+# @name quarantine
+POST {{parseUrl}}/functions/quarantineUser
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "userId": "{{quarantineTarget.response.body.objectId}}",
+  "reason": "REPLACE_WITH_QUARANTINE_REASON"
+}
+
+###
+
+### ปลดล็อกผู้ใช้เป้าหมาย
+# @name unquarantine
+POST {{parseUrl}}/functions/unquarantineUser
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "userId": "{{quarantineTarget.response.body.objectId}}"
+}
+
+###
+
+### ============================================================
+### QUERY (masterKey)
+### ============================================================
+
+### ดึง SecurityAlert ทั้งหมด
+# @name queryAlerts
+GET {{parseUrl}}/classes/SecurityAlert
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+###
+
+### ดึง SecurityScan ล่าสุด 10 รายการ
+# @name queryScans
+GET {{parseUrl}}/classes/SecurityScan?order=-createdAt&limit=10
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+###
+
+### ดึง SecurityLog ล่าสุด 20 รายการ
+# @name queryLogs
+GET {{parseUrl}}/classes/SecurityLog?order=-createdAt&limit=20
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+###
+
+### ============================================================
+### REST แบบใช้ session token ของ SecurityAnalyst
+### ============================================================
+
+### รัน port scan โดยใช้ session
+# @name portScanWithSession
+POST {{parseUrl}}/functions/runPortScan
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{loginAnalyst.response.body.sessionToken}}
+
+{
+  "host": "127.0.0.1",
+  "ports": [80, 443, 1337],
+  "timeoutMs": 1000
+}
+
+###
+
+### ดึง alert ของ user ปัจจุบัน
+# @name myAlerts
+GET {{parseUrl}}/classes/SecurityAlert
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{loginAnalyst.response.body.sessionToken}}
+
+###
+
+### แก้ profile ตัวเอง
+# @name updateProfile
+PUT {{parseUrl}}/users/{{loginAnalyst.response.body.objectId}}
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{loginAnalyst.response.body.sessionToken}}
+
+{
+  "securityFlags": {
+    "twoFactorEnabled": true
+  }
+}
+
+###
+
+### ============================================================
+### TESTS: request เหล่านี้คาดว่าจะถูกปฏิเสธ
+### ============================================================
+
+### [คาดว่าล้มเหลว] client เขียน SecurityLog ตรง ๆ ไม่ผ่าน
+# @name blockLogWrite
+POST {{parseUrl}}/classes/SecurityLog
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+
+{
+  "event": "REPLACE_WITH_TEST_EVENT",
+  "meta": {}
+}
+
+###
+
+### [คาดว่าล้มเหลว] client สร้าง class ใหม่ไม่ผ่าน
+# @name blockClassCreation
+POST {{parseUrl}}/classes/NewForbiddenClass
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+
+{
+  "foo": "bar"
+}
+
+###
+
+### [คาดว่าล้มเหลว] masterKey จาก IP ที่ไม่ใช่ localhost
+# @name blockMasterKeyFromRemote
+GET {{parseUrl}}/classes/SecurityAlert
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+X-Forwarded-For: 203.0.113.10
+
+###
+
+### ออกจากระบบ
+# @name logout
+POST {{parseUrl}}/logout
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{loginAnalyst.response.body.sessionToken}}
+
+{}
