@@ -25,33 +25,5 @@ services:
       retries: 10
       start_period: 10s
 
-  app:
-    build:
-      context: .
-    container_name: parse-server-app
-    restart: unless-stopped
-    init: true
-    ports:
-      - "1337:1337"
-    env_file:
-      - .env
-    environment:
-      HOST: 0.0.0.0
-      SERVER_PORT: 1337
-      DATABASE_URI: "mongodb://${MONGO_USERNAME:-security_user}:${MONGO_PASSWORD:-security_pass}@mongodb:27017/${MONGO_DB:-securitydb}?authSource=admin"
-    depends_on:
-      mongodb:
-        condition: service_healthy
-    healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - "fetch('http://127.0.0.1:1337/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
-
 volumes:
   mongodb_data:
