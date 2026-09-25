@@ -6,16 +6,52 @@ services:
     ports:
       - "27017:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: security_user
-      MONGO_INITDB_ROOT_PASSWORD: security_pass
-      MONGO_INITDB_DATABASE: securitydb
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-security_user}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-security_pass}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-securitydb}
     volumes:
       - mongodb_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet
+          --username "$${MONGO_INITDB_ROOT_USERNAME}"
+          --password "$${MONGO_INITDB_ROOT_PASSWORD}"
+          --authenticationDatabase admin
+          --eval 'quit(db.adminCommand({ ping: 1 }).ok ? 0 : 2)'
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
+
+  app:
+    build:
+      context: .
+    container_name: parse-server-app
+    restart: unless-stopped
+    init: true
+    ports:
+      - "1337:1337"
+    env_file:
+      - .env
+    environment:
+      HOST: 0.0.0.0
+      SERVER_PORT: 1337
+      DATABASE_URI: "mongodb://${MONGO_USERNAME:-security_user}:${MONGO_PASSWORD:-security_pass}@mongodb:27017/${MONGO_DB:-securitydb}?authSource=admin"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:1337/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
 volumes:
   mongodb_data:

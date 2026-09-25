@@ -40,21 +40,19 @@ Parse Server พร้อมการตั้งค่าด้านควา�
 - `SecurityLog` — `event`, `meta`, `actor` (append-only)
 
 ## ความต้องการ
-- Node.js >= 18
-- Docker (+ Docker Desktop) ใช้รัน MongoDB
+- Docker Desktop
+- Node.js >= 18 เฉพาะกรณีต้องการรันแบบ local
 
 ## เริ่มใช้งาน
 
+1. คัดลอก `.env.example` เป็น `.env` และกำหนดค่า secrets ให้ครบ
+2. เริ่ม MongoDB และ Parse Server พร้อมกัน:
+
 ```bash
-# 1. เริ่ม MongoDB (ครั้งแรกจะ pull image มาเอง)
-docker compose up -d
-
-# 2. ตั้งค่า secrets ใน .env (เปลี่ยนทุก key ที่เริ่มด้วย change_me_!)
-npm install        # ถ้ายังไม่ได้ติดตั้ง dependencies
-
-# 3. รัน Parse Server + Dashboard
-npm start
+docker compose up
 ```
+
+ครั้งแรก Compose จะ build image ให้อัตโนมัติ และ Parse Server จะเริ่มหลัง MongoDB พร้อมใช้งาน
 
 เมื่อพร้อมใช้งาน:
 - **Parse API:** http://localhost:1337/parse
@@ -63,13 +61,14 @@ npm start
 
 ## ทดสอบระบบ
 
-```bash
-# ทดสอบครบทุกฟีเจอร์ + security blocks (29 checks)
-npm test
+เมื่อ `docker compose up` ทำงานอยู่ ใช้คำสั่งนี้ทดสอบ:
 
-# รัน demo ครบทุกฟีเจอร์ (สร้าง role, สแกนพอร์ต, สร้าง alert, quarantine ผู้ใช้)
-node examples/demo-security.js
+```bash
+docker compose exec app npm test
+docker compose exec app node examples/demo-security.js
 ```
+
+หากรันแบบ local ให้ใช้ `npm test` และ `node examples/demo-security.js` แทน
 
 ### ตัวอย่าง REST แบบย่อ
 ```
@@ -98,11 +97,13 @@ parse server/
 ├── cloud/main.js          # Cloud code ระบบ security + hooks
 ├── examples/demo-security.js  # ตัวอย่าง client code
 ├── tests/verify-all.js    # ชุดทดสอบครบทุกฟีเจอร์ (npm test)
-├── docker-compose.yml     # MongoDB (มี auth)
+├── Dockerfile             # image สำหรับ Parse Server
+├── .dockerignore          # ไม่นำ secrets และ dependency เข้า image
+├── docker-compose.yml     # MongoDB + Parse Server
 ├── .env / .env.example    # ค่าคงที่และ secrets
 └── package.json
 ```
 
 ## การปิดเครื่อง
-- `Ctrl+C` — graceful shutdown
-- `docker compose down` — หยุด MongoDB
+- `Ctrl+C` — หยุด Compose
+- `docker compose down` — หยุด MongoDB และ Parse Server

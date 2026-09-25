@@ -141,7 +141,10 @@ async function main() {
   r = await root(`${process.env.SERVER_PORT || 1337}/dashboard`);
   check('Dashboard เข้าได้', r.status === 200, r.status);
 
-  const envText = fs.readFileSync(path.join(ROOT, '.env'), 'utf8');
+  const envFile = path.join(ROOT, '.env');
+  const envText = fs.existsSync(envFile)
+    ? fs.readFileSync(envFile, 'utf8')
+    : Object.entries(process.env).map(([key, value]) => `${key}=${value}`).join('\n');
   const leftover = envText.split('\n').filter((l) => !l.trim().startsWith('#') && l.includes('change_me_'));
   check('.env ไม่มีค่า placeholder (change_me_)', leftover.length === 0, leftover.join(';') || 'clean');
 

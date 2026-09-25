@@ -1,7 +1,7 @@
 ### ============================================================
 ### Parse Server - Security API (ใช้กับ VS Code Extension: "REST Client")
 ### รัน: เปิดไฟล์นี้ใน VS Code แล้วกด "Send Request" ใต้แต่ละ request
-### ข้อกำหนด: npm start (เซิร์ฟเวอร์ต้องรันอยู่ที่ localhost:1337)
+### ข้อกำหนด: รัน `docker compose up` แล้วเซิร์ฟเวอร์ต้องรันอยู่ที่ localhost:1337
 ### ============================================================
 
 @host = http://localhost:1337
