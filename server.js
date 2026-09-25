@@ -78,8 +78,11 @@ const serverConfig = {
   allowClientClassCreation: false,
   // ผู้ใช้ทุกคนเป็น private - อ่านข้อมูลคนอื่นไม่ได้
   enforcePrivateUsers: true,
-  // masterKey ใช้ได้จาก localhost เท่านั้น เปลี่ยนเป็น IP ของ server เองได้
-  masterKeyIps: ['127.0.0.1', '::1'],
+  // masterKey ใช้ได้จาก localhost และ Docker host ตาม MASTER_KEY_IPS
+  masterKeyIps: (process.env.MASTER_KEY_IPS || '127.0.0.1,::1,172.20.0.1')
+    .split(',')
+    .map((ip) => ip.trim())
+    .filter(Boolean),
   // จำกัดขนาดไฟล์ upload
   maxUploadSize: process.env.MAX_UPLOAD_SIZE || '10mb',
   // ฟิลด์ที่ client เอาไว้ read ต้องใช้ masterKey ถึงจะเห็นค่า

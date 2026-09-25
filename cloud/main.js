@@ -7,8 +7,19 @@ const SECURITY_ROLE = 'SecurityAnalyst';
 // ============================================================
 
 // ตรวจสอบว่า request มาจาก masterKey หรือ user ที่มี role SecurityAnalyst
-function assertSecurityAccess(req) {
+async function assertSecurityAccess(req) {
   if (req.master) return;
+  if (req.user) {
+    const role = await new Parse.Query(Parse.Role)
+      .equalTo('name', SECURITY_ROLE)
+      .first({ useMasterKey: true });
+    if (role) {
+      const users = role.relation('users').query();
+      users.equalTo('objectId', req.user.id);
+      const member = await users.first({ useMasterKey: true });
+      if (member) return;
+    }
+  }
   throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'ต้องใช้ masterKey หรือ role SecurityAnalyst เท่านั้น');
 }
 
@@ -27,7 +38,7 @@ async function writeLog(event, meta = {}) {
 // ใช้ตรวจสอบว่า target มี service ไหนเปิดอยู่บ้าง (external scan)
 // ============================================================
 Parse.Cloud.define('runPortScan', async (req) => {
-  assertSecurityAccess(req);
+  await assertSecurityAccess(req);
 
   const host = req.params.host;
   const ports = req.params.ports; // array เช่น [22,80,443,3306,5432,8080,8443]
@@ -116,7 +127,7 @@ async function createAlert(severity, title, details = {}) {
 }
 
 Parse.Cloud.define('createSecurityAlert', async (req) => {
-  assertSecurityAccess(req);
+  await assertSecurityAccess(req);
   const { severity, title, details } = req.params;
   const allowed = ['critical', 'high', 'medium', 'low'];
   if (!allowed.includes(severity)) throw new Parse.Error(Parse.Error.INVALID_QUERY, 'severity ไม่ถูกต้อง');
@@ -126,11 +137,33 @@ Parse.Cloud.define('createSecurityAlert', async (req) => {
   return alert;
 }, { requireAnyUserRoles: [SECURITY_ROLE] });
 
-// ============================================================
-// Cloud Function: รายงานสรุปสถานะความปลอดภัย
-// ============================================================
+Parse.Cloud.define('assignSecurityAnalystRole', async (req) => {
+  if (!req.master) {
+    throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'ต้องใช้ masterKey เท่านั้น');
+  }
+  const userId = req.params.userId;
+  if (!userId) throw new Parse.Error(Parse.Error.INVALID_QUERY, 'ต้องระบุ userId');
+
+  const user = await new Parse.Query(Parse.User).get(userId, { useMasterKey: true });
+  let role = await new Parse.Query(Parse.Role)
+    .equalTo('name', SECURITY_ROLE)
+    .first({ useMasterKey: true });
+
+  if (!role) {
+    const acl = new Parse.ACL();
+    acl.setPublicReadAccess(true);
+    role = new Parse.Role(SECURITY_ROLE, acl);
+    await role.save(null, { useMasterKey: true });
+  }
+
+  role.relation('users').add(user);
+  await role.save(null, { useMasterKey: true });
+  return { userId: user.id, role: SECURITY_ROLE };
+});
+
+
 Parse.Cloud.define('getSecurityReport', async (req) => {
-  assertSecurityAccess(req);
+  await assertSecurityAccess(req);
 
   const alertQuery = new Parse.Query('SecurityAlert');
   alertQuery.select('severity', 'status');
@@ -173,7 +206,7 @@ Parse.Cloud.define('getSecurityReport', async (req) => {
 // - ยกเลิก session ทั้งหมด + ขึ้นบัญชีดำ
 // ============================================================
 Parse.Cloud.define('quarantineUser', async (req) => {
-  assertSecurityAccess(req);
+  await assertSecurityAccess(req);
 
   const targetId = req.params.userId;
   if (!targetId) throw new Parse.Error(Parse.Error.INVALID_QUERY, 'ต้องระบุ userId');
@@ -204,7 +237,7 @@ Parse.Cloud.define('quarantineUser', async (req) => {
 // Cloud Function: ปลดล็อกผู้ใช้
 // ============================================================
 Parse.Cloud.define('unquarantineUser', async (req) => {
-  assertSecurityAccess(req);
+  await assertSecurityAccess(req);
   const targetId = req.params.userId;
   if (!targetId) throw new Parse.Error(Parse.Error.INVALID_QUERY, 'ต้องระบุ userId');
 
@@ -222,7 +255,7 @@ Parse.Cloud.define('unquarantineUser', async (req) => {
 // Cloud Function: ปิด/แก้ alert
 // ============================================================
 Parse.Cloud.define('updateAlertStatus', async (req) => {
-  assertSecurityAccess(req);
+  await assertSecurityAccess(req);
   const { alertId, status, note } = req.params;
   const allowed = ['open', 'in_progress', 'resolved'];
   if (!allowed.includes(status)) throw new Parse.Error(Parse.Error.INVALID_QUERY, 'status ไม่ถูกต้อง');

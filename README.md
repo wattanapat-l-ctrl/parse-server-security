@@ -42,6 +42,8 @@ cp .env.example .env
 
 ค่า `MASTER_KEY`, `REST_API_KEY` และ `CLIENT_KEY` ไม่ควรใช้ค่า `REPLACE_WITH_...` หรือค่าตัวอย่างจาก GitHub เด็ดขัด ไฟล์ `.env` ถูกอยู่ใน `.gitignore` และต้องไม่ commit หรือส่งขึ้น GitHub
 
+ค่า `MASTER_KEY_IPS` มีค่าเริ่มต้นสำหรับ localhost และ Docker host ของโปรเจกต์นี้ หาก Docker ใช้ network อื่น ให้ปรับค่านี้ใน `.env` ให้ตรงกับ gateway ที่ต้องการอนุญาต
+
 ### 3. เริ่มระบบทั้งหมด
 
 รันคำสั่งนี้ใน Terminal:
@@ -120,15 +122,9 @@ docker compose exec app node examples/demo-security.js
 
 ## ใช้งานผ่าน VS Code REST Client
 
-ติดตั้ง VS Code Extension ชื่อ **REST Client** จากนั้นเปิดไฟล์ `api.http`
+ติดตั้ง VS Code Extension ชื่อ **REST Client** จากนั้นเปิดไฟล์ `api.http` ใน VS Code
 
-ก่อนกด **Send Request** ให้แก้ค่าด้านบนของไฟล์:
-
-```text
-@appId = ค่า APP_ID จาก .env
-@restKey = ค่า REST_API_KEY จาก .env
-@masterKey = ค่า MASTER_KEY จาก .env
-```
+ไฟล์จะอ่าน `APP_ID`, `REST_API_KEY` และ `MASTER_KEY` จากไฟล์ `.env` โดยอัตโนมัติ จึงไม่ต้องแก้ key จริงลงใน `api.http` กด **Send Request** ให้ request ไล่จากบนลงล่างตามลำดับ เพราะบาง request ใช้ผลลัพธ์จาก request ก่อนหน้า
 
 เริ่มจาก request นี้ก่อน:
 
@@ -138,7 +134,7 @@ GET {{host}}/health
 
 ถ้าเห็น `{"status":"ok"}` แสดงว่า VS Code เชื่อมต่อกับ server ได้แล้ว
 
-ค่าใน `api.http` ถูกทำเป็น placeholder โดยเจตนา เพื่อไม่ให้ secret ติดไปกับ GitHub ห้าม commit ค่าจริงลงในไฟล์นี้
+request ที่มีคำว่า `[คาดว่าล้มเหลว]` เป็น security tests และควรได้รับการปฏิเสธตามที่ระบุ ไม่ใช่ข้อผิดพลาดของไฟล์ตัวอย่าง ห้าม commit ค่า secret จริงลงใน `api.http`
 
 ## ระบบทำอะไรได้บ้าง
 
@@ -147,6 +143,7 @@ GET {{host}}/health
 | ชื่อฟังก์ชัน | หน้าที่ |
 |---|---|
 | `runPortScan` | สแกนพอร์ตแบบ TCP connect |
+| `assignSecurityAnalystRole` | เพิ่มผู้ใช้เข้า role `SecurityAnalyst` โดยใช้ `masterKey` เท่านั้น |
 | `createSecurityAlert` | สร้าง Security Alert |
 | `getSecurityReport` | สร้างสรุปสถานะความปลอดภัย |
 | `quarantineUser` | ล็อกผู้ใช้และยกเลิก session |
@@ -163,7 +160,7 @@ GET {{host}}/health
 - ล็อกบัญชีหลัง login ผิดตามจำนวนครั้งที่กำหนด
 - ปิดการสร้าง Parse Class จาก client โดยตรง
 - ป้องกันการแก้ไขข้อมูลผู้ใช้รายอื่น
-- จำกัด `masterKey` ให้ใช้จาก localhost เป็นหลัก
+- จำกัด `masterKey` ให้ใช้จาก localhost หรือ IP ที่กำหนดไว้ใน `MASTER_KEY_IPS` เป็นหลัก
 - ปกป้องฟิลด์สำคัญด้วย `protectedFields`
 - เพิ่ม HTTP security headers ด้วย Helmet
 - จำกัด CORS ตาม `ALLOWED_ORIGINS`
