@@ -34,9 +34,9 @@ X-Parse-Application-Id: {{appId}}
 X-Parse-REST-API-Key: {{restKey}}
 
 {
-  "username": "api_user_{{$guid}}",
-  "password": "ApiHttp-{{$guid}}-Test!",
-  "email": "api_user_{{$guid}}@test.local"
+  "username": "Txmlolipop",
+  "password": "Txm0640423219",
+  "email": "txmlolipop@gmail.com"
 }
 
 ###
@@ -49,8 +49,8 @@ X-Parse-Application-Id: {{appId}}
 X-Parse-REST-API-Key: {{restKey}}
 
 {
-  "username": "{{signUp.request.body.$.username}}",
-  "password": "{{signUp.request.body.$.password}}"
+  "username": "Txmlolipop",
+  "password": "Txm0640423219"
 }
 
 ###
@@ -63,8 +63,8 @@ X-Parse-Application-Id: {{appId}}
 X-Parse-Master-Key: {{masterKey}}
 
 {
-  "username": "{{signUp.request.body.$.username}}",
-  "password": "{{signUp.request.body.$.password}}"
+  "username": "Txmlolipop",
+  "password": "Txm0640423219"
 }
 
 ###
@@ -86,7 +86,7 @@ X-Parse-Application-Id: {{appId}}
 X-Parse-Master-Key: {{masterKey}}
 
 {
-  "userId": "{{signUp.response.body.objectId}}"
+  "userId": "dH1Dz856MT"
 }
 
 ###
@@ -99,8 +99,8 @@ X-Parse-Application-Id: {{appId}}
 X-Parse-REST-API-Key: {{restKey}}
 
 {
-  "username": "{{signUp.request.body.$.username}}",
-  "password": "{{signUp.request.body.$.password}}"
+  "username": "Txmlolipop",
+  "password": "Txm0640423219"
 }
 
 ###
@@ -113,9 +113,9 @@ X-Parse-Application-Id: {{appId}}
 X-Parse-REST-API-Key: {{restKey}}
 
 {
-  "username": "api_target_{{$guid}}",
-  "password": "ApiHttp-{{$guid}}-Test!",
-  "email": "api_target_{{$guid}}@test.local"
+  "username": "Tester",
+  "password": "Test1234",
+  "email": "tester@gmail.com"
 }
 
 ###
