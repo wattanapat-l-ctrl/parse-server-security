@@ -10,17 +10,26 @@ const app = express();
 app.set('trust proxy', 1);
 
 // ---------- HTTP Security Headers ----------
-app.use(
-  helmet({
+app.use((req, res, next) => {
+  // Parse Dashboard มี CSP ของตัวเอง
+  // ไม่ใช้ CSP จาก Helmet กับ /dashboard
+  if (req.path.startsWith('/dashboard')) {
+    return helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+    })(req, res, next);
+  }
+
+  return helmet({
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
         frameAncestors: ["'self'"],
       },
     },
-    crossOriginEmbedderPolicy: false, // เปิดถ้าใช้ client เป็น cross-origin
-  })
-);
+    crossOriginEmbedderPolicy: false,
+  })(req, res, next);
+});
 
 // ---------- CORS (อนุญาตเฉพาะ origin ที่ระบุ) ----------
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
