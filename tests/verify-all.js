@@ -164,15 +164,22 @@ async function testRateLimit() {
   const env = { ...process.env, SERVER_PORT: String(PORT), RATE_LIMIT_MAX: '10', LOG_LEVEL: 'error', DASHBOARD_PORT: '4041' };
   const child = spawn(process.execPath, ['server.js'], { cwd: ROOT, env, stdio: 'ignore' });
   try {
+    // server ลูกต้อง require parse-server ใหม่ทุกครั้ง ถ้าโปรเจคอยู่บน network share
+    // (UNC path) จะใช้เวลานานมาก จึงต้องรอแบบ deadline แทนการนับรอบคงที่
+    const readyTimeoutMs = Number(process.env.RATE_LIMIT_READY_TIMEOUT_MS || 180000);
+    const deadline = Date.now() + readyTimeoutMs;
     let up = false;
-    for (let i = 0; i < 60; i++) {
+    while (Date.now() < deadline) {
       try {
         const res = await fetch(`http://localhost:${PORT}/parse/health`);
         if (res.ok) { up = true; break; }
       } catch { /* not yet */ }
-      await sleep(300);
+      await sleep(500);
     }
-    if (!up) return false;
+    if (!up) {
+      console.warn(`[WARN] server ที่ port ${PORT} ไม่ตอบภายใน ${Math.round(readyTimeoutMs / 1000)}s (RATE_LIMIT_READY_TIMEOUT_MS)`);
+      return false;
+    }
     let got429 = false;
     const headers = { 'X-Parse-Application-Id': APP_ID, 'X-Parse-REST-API-Key': REST, 'Content-Type': 'application/json' };
     for (let i = 0; i < 30; i++) {

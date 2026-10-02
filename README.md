@@ -155,6 +155,10 @@ request ที่มีคำว่า `[คาดว่าล้มเหลว
 | `quarantineUser` | ล็อกผู้ใช้และยกเลิก session |
 | `unquarantineUser` | ปลดล็อกผู้ใช้ |
 | `updateAlertStatus` | เปลี่ยนสถานะของ Alert |
+| `createIncident` | สร้าง Incident จาก Alert (1 Alert มีได้ 1 Incident) |
+| `assignIncident` | มอบหมาย Incident ให้ผู้รับผิดชอบ |
+| `addIncidentNote` | เพิ่มบันทึกระหว่างตรวจสอบ Incident |
+| `updateIncidentStatus` | เปลี่ยนสถานะ Incident (`open`, `investigating`, `contained`, `resolved`) |
 
 ฟังก์ชันส่วนใหญ่ต้องใช้ `masterKey` หรือ session ของผู้ใช้ที่มี role `SecurityAnalyst`
 
@@ -171,7 +175,11 @@ request ที่มีคำว่า `[คาดว่าล้มเหลว
 - เพิ่ม HTTP security headers ด้วย Helmet
 - จำกัด CORS ตาม `ALLOWED_ORIGINS`
 - ยกเลิก session เมื่อเปลี่ยนรหัสผ่านหรือกักกันผู้ใช้
-- ป้องกัน client เขียน Security Log, Alert และ Scan โดยตรง
+- ป้องกัน client เขียน Security Log, Alert, Scan และ Incident โดยตรง
+- อนุญาตให้อ่าน SecurityIncident เฉพาะ `masterKey` หรือ role `SecurityAnalyst`
+
+> ค่า `MASTER_KEY_IPS` ใน `.env` เว้นว่างไว้ได้ เพราะ `server.js` จะใช้ค่า default
+> `127.0.0.1,::1,172.20.0.1` ให้อัตโนมัติ แต่ถ้าตั้งค่าเองต้องใส่เป็นรายการคั่นด้วย `,`
 
 ## โครงสร้างระบบ
 
@@ -196,6 +204,8 @@ MongoDB :27017
 |---|---|
 | `server.js` | ตั้งค่า Express, Parse Server, Dashboard และ security |
 | `cloud/main.js` | Cloud Functions และ Hooks ของระบบ Security |
+| `cloud/incidents.js` | Cloud Functions จัดการ Incident ต่อยอดจาก Security Alert |
+| `cloud/access.js` | ตัวช่วยตรวจสิทธิ์ร่วมกัน (role `SecurityAnalyst`) |
 | `docker-compose.yml` | เริ่ม MongoDB และ Parse Server พร้อมกัน |
 | `Dockerfile` | สร้าง image ของ Parse Server |
 | `.env.example` | ตัวอย่างค่าตั้งค่า |
@@ -261,6 +271,27 @@ docker compose up
 ### Port 1337 ถูกใช้งาน
 
 ตรวจสอบโปรแกรมที่ใช้ port นี้ก่อน หรือเปลี่ยน port ให้ตรงกันทั้งใน `.env` และ `docker-compose.yml`
+
+### `npm start` หรือ `npm test` ขึ้น `Cannot find module 'C:\Windows\...'`
+
+เกิดเมื่อโฟลเดอร์โปรเจกต์อยู่บน network share เช่น `\\เซิร์ฟเวอร์\...` เพราะ `npm`
+เรียกใช้ `CMD.EXE` ซึ่งไม่รองรับ UNC path แล้วเปลี่ยน working directory ไปที่ `C:\Windows`
+
+แก้โดยเลือกวิธีใดวิธีหนึ่ง:
+
+1. รันใน Docker ซึ่งเป็นวิธีหลักของโปรเจกต์ (แนะนำ)
+   ```powershell
+   docker compose exec app npm test
+   ```
+2. รัน `node` โดยตรงจาก PowerShell แทน `npm`
+   ```powershell
+   node server.js
+   node tests\verify-all.js
+   ```
+3. ย้ายโปรเจกต์ไปไว้ในไดรฟ์ในเครื่อง เช่น `C:\projects\parse-server-security`
+
+เมื่อรันนอก Docker การโหลด `parse-server` จาก network share ช้ามาก (มักนานกว่า 1 นาที)
+หากชุดทดสอบรอ server ลูกไม่ทัน ให้เพิ่มเวลารอได้ด้วย `RATE_LIMIT_READY_TIMEOUT_MS`
 
 ## คำแนะนำสำหรับ Production
 

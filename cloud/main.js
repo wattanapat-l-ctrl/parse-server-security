@@ -1,27 +1,10 @@
 const net = require('net');
 
-const SECURITY_ROLE = 'SecurityAnalyst';
+const { SECURITY_ROLE, assertSecurityAccess } = require('./access');
 
 // ============================================================
 // Helper
 // ============================================================
-
-// ตรวจสอบว่า request มาจาก masterKey หรือ user ที่มี role SecurityAnalyst
-async function assertSecurityAccess(req) {
-  if (req.master) return;
-  if (req.user) {
-    const role = await new Parse.Query(Parse.Role)
-      .equalTo('name', SECURITY_ROLE)
-      .first({ useMasterKey: true });
-    if (role) {
-      const users = role.relation('users').query();
-      users.equalTo('objectId', req.user.id);
-      const member = await users.first({ useMasterKey: true });
-      if (member) return;
-    }
-  }
-  throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'ต้องใช้ masterKey หรือ role SecurityAnalyst เท่านั้น');
-}
 
 // เขียน audit log (บันทึกได้จาก cloud code เท่านั้น - client เขียนไม่ผ่าน)
 async function writeLog(event, meta = {}) {
@@ -328,6 +311,17 @@ Parse.Cloud.beforeFind('SecurityAlert', (req) => {
 Parse.Cloud.beforeSave('SecurityScan', (req) => {
   if (req.master) return req.object;
   throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'scan สร้างผ่าน cloud function เท่านั้น');
+});
+
+// SecurityIncident: อ่านและเขียนได้เฉพาะ masterKey หรือ role SecurityAnalyst
+Parse.Cloud.beforeSave('SecurityIncident', (req) => {
+  if (req.master) return req.object;
+  throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'incident แก้ไขผ่าน cloud function เท่านั้น');
+});
+Parse.Cloud.beforeFind('SecurityIncident', async (req) => {
+  if (req.master) return {};
+  await assertSecurityAccess(req);
+  return {};
 });
 
 console.log('✔ Cloud Code (security) โหลดเรียบร้อย');

@@ -3,6 +3,8 @@
 // จัดการเหตุการณ์ด้านความปลอดภัยที่ต่อยอดจาก SecurityAlert
 // ============================================================
 
+const { SECURITY_ROLE, assertSecurityAccess } = require('./access');
+
 const INCIDENT_STATUS = [
   'open',
   'investigating',
@@ -14,6 +16,8 @@ const INCIDENT_STATUS = [
 // 1. สร้าง Incident จาก Security Alert
 // ------------------------------------------------------------
 Parse.Cloud.define('createIncident', async (req) => {
+  await assertSecurityAccess(req);
+
   const { alertId, title, description } = req.params;
 
   if (!alertId) {
@@ -64,12 +68,14 @@ Parse.Cloud.define('createIncident', async (req) => {
     status: incident.get('status'),
     message: 'สร้าง Security Incident สำเร็จ'
   };
-});
+}, { requireAnyUserRoles: [SECURITY_ROLE] });
 
 // ------------------------------------------------------------
 // 2. มอบหมาย Incident ให้ผู้รับผิดชอบ
 // ------------------------------------------------------------
 Parse.Cloud.define('assignIncident', async (req) => {
+  await assertSecurityAccess(req);
+
   const { incidentId, assignedTo } = req.params;
 
   if (!incidentId || !assignedTo) {
@@ -95,12 +101,14 @@ Parse.Cloud.define('assignIncident', async (req) => {
     assignedTo: incident.get('assignedTo'),
     message: 'มอบหมาย Incident สำเร็จ'
   };
-});
+}, { requireAnyUserRoles: [SECURITY_ROLE] });
 
 // ------------------------------------------------------------
 // 3. เพิ่ม Note ระหว่างตรวจสอบ Incident
 // ------------------------------------------------------------
 Parse.Cloud.define('addIncidentNote', async (req) => {
+  await assertSecurityAccess(req);
+
   const { incidentId, note } = req.params;
 
   if (!incidentId || !note) {
@@ -133,12 +141,14 @@ Parse.Cloud.define('addIncidentNote', async (req) => {
     notes,
     message: 'เพิ่ม Incident Note สำเร็จ'
   };
-});
+}, { requireAnyUserRoles: [SECURITY_ROLE] });
 
 // ------------------------------------------------------------
 // 4. เปลี่ยนสถานะ Incident
 // ------------------------------------------------------------
 Parse.Cloud.define('updateIncidentStatus', async (req) => {
+  await assertSecurityAccess(req);
+
   const { incidentId, status } = req.params;
 
   if (!incidentId || !status) {
@@ -175,4 +185,4 @@ Parse.Cloud.define('updateIncidentStatus', async (req) => {
     status: incident.get('status'),
     message: 'อัปเดตสถานะ Incident สำเร็จ'
   };
-});
+}, { requireAnyUserRoles: [SECURITY_ROLE] });

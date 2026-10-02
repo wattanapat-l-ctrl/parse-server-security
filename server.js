@@ -10,16 +10,33 @@ const app = express();
 app.set('trust proxy', 1);
 
 // ---------- HTTP Security Headers ----------
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        frameAncestors: ["'self'"],
-      },
+// Parse Dashboard ฝัง <script>ตั้งค่า PARSE_DASHBOARD_PATH ไว้ในหน้าเว็บ ถ้า script-src
+// บล็อก inline script ค่านี้จะเป็น undefined และ router จะตั้ง basename ผิดเป็น "/"
+// ทำให้หลัง login แล้วเห็นหน้า 404 จึงต้องอนุญาต inline script เฉพาะ /dashboard
+const helmetOptions = {
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      frameAncestors: ["'self'"],
     },
-    crossOriginEmbedderPolicy: false, // เปิดถ้าใช้ client เป็น cross-origin
-  })
+  },
+  crossOriginEmbedderPolicy: false, // เปิดถ้าใช้ client เป็น cross-origin
+};
+const dashboardPath = (process.env.DASHBOARD_PATH || '/dashboard').replace(/\/+$/, '');
+const apiHelmet = helmet(helmetOptions);
+const dashboardHelmet = helmet({
+  ...helmetOptions,
+  contentSecurityPolicy: {
+    directives: {
+      ...helmetOptions.contentSecurityPolicy.directives,
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+    },
+  },
+});
+app.use((req, res, next) =>
+  req.path === dashboardPath || req.path.startsWith(`${dashboardPath}/`)
+    ? dashboardHelmet(req, res, next)
+    : apiHelmet(req, res, next)
 );
 
 // ---------- CORS (อนุญาตเฉพาะ origin ที่ระบุ) ----------
@@ -113,7 +130,7 @@ const serverConfig = {
   verifyUserEmails: false,
   // false = คืน error เป็น JSON เสมอ (ไม่ render HTML error page) เหมาะกับ API
   enableExpressErrorHandler: false,
-  // opt-in เข้า future defaults (ปิด deprecation warnings)
+  // true = Parse.Object ที่ส่งเข้า Cloud Function จะถูกแปลงเป็น instance จริง (ค่า default ของ Parse Server คือ false)
   encodeParseObjectInCloudFunction: true,
   enableInsecureAuthAdapters: false,
 
@@ -183,7 +200,7 @@ async function main() {
   // ---------- Graceful Shutdown ----------
   const shutdown = async () => {
     console.log('\nShutting down Parse Server...');
-    try { await api.server.close(); } catch (_) { /* ignore */ }
+    try { if (typeof api.handleShutdown === 'function') await api.handleShutdown(); } catch (_) { /* ignore */ }
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 5000).unref();
   };
