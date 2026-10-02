@@ -331,3 +331,4 @@ Parse.Cloud.beforeSave('SecurityScan', (req) => {
 });
 
 console.log('✔ Cloud Code (security) โหลดเรียบร้อย');
+require('./incidents');
