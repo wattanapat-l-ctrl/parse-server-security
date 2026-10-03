@@ -1,6 +1,6 @@
 const net = require('net');
 
-const { SECURITY_ROLE, assertSecurityAccess } = require('./access');
+const { SECURITY_ROLE, hasSecurityRole, assertSecurityAccess } = require('./access');
 
 // ============================================================
 // Helper
@@ -99,24 +99,34 @@ Parse.Cloud.define('runPortScan', async (req) => {
 // Cloud Function: สร้าง Security Alert
 // (ใช้ภายในระบบ - role admin/analyst เท่านั้น)
 // ============================================================
-async function createAlert(severity, title, details = {}) {
+// userId คือ objectId ของ _User ที่ alert นี้เกี่ยวข้อง (เช่น ผู้ถูกกักกัน)
+// ถ้าไม่ระบุจะเป็น alert ระดับระบบ ผู้ใช้ทั่วไปจะมองไม่เห็น
+async function createAlert(severity, title, details = {}, userId = null) {
   const Alert = new Parse.Object('SecurityAlert');
   Alert.set('severity', severity); // critical | high | medium | low
   Alert.set('title', title);
   Alert.set('details', details);
   Alert.set('status', 'open'); // open | in_progress | resolved
+  Alert.set('userId', userId || null);
   await Alert.save(null, { useMasterKey: true });
   return Alert;
 }
 
 Parse.Cloud.define('createSecurityAlert', async (req) => {
   await assertSecurityAccess(req);
-  const { severity, title, details } = req.params;
+  const { severity, title, details, userId } = req.params;
   const allowed = ['critical', 'high', 'medium', 'low'];
   if (!allowed.includes(severity)) throw new Parse.Error(Parse.Error.INVALID_QUERY, 'severity ไม่ถูกต้อง');
   if (!title) throw new Parse.Error(Parse.Error.INVALID_QUERY, 'ต้องระบุ title');
-  const alert = await createAlert(severity, title, details || {});
-  await writeLog('security.alert.created', { alertId: alert.id, severity, title });
+
+  let ownerId = null;
+  if (userId) {
+    const owner = await new Parse.Query(Parse.User).get(userId, { useMasterKey: true });
+    ownerId = owner.id;
+  }
+
+  const alert = await createAlert(severity, title, details || {}, ownerId);
+  await writeLog('security.alert.created', { alertId: alert.id, severity, title, userId: ownerId });
   return alert;
 }, { requireAnyUserRoles: [SECURITY_ROLE] });
 
@@ -209,7 +219,8 @@ Parse.Cloud.define('quarantineUser', async (req) => {
   await createAlert(
     req.params.severity || 'high',
     `ผู้ใช้ ${user.get('username')} ถูกกักกัน (quarantine)`,
-    { userId: user.id, reason: req.params.reason, revokedSessions: sessions.length }
+    { userId: user.id, reason: req.params.reason, revokedSessions: sessions.length },
+    user.id
   );
   await writeLog('security.user.quarantined', { userId: user.id, actor: req.user ? req.user.id : 'master' });
 
@@ -298,13 +309,18 @@ Parse.Cloud.beforeSave('SecurityAlert', (req) => {
   if (req.master) return req.object;
   throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'alert สร้างผ่าน cloud function เท่านั้น');
 });
-Parse.Cloud.beforeFind('SecurityAlert', (req) => {
-  if (req.master) return {};
-  if (req.user) {
-    // ผู้ใช้ทั่วไปเห็นเฉพาะ alert ที่ tagged ถึงตน
-    return { userId: req.user.id };
+// หมายเหตุ: beforeFind ของ Parse Server รับผลคืนค่าเฉพาะตอนเป็น Parse.Query เท่านั้น
+// การคืน object ธรรมดาเช่น { userId: req.user.id } จะถูกทิ้งทิ้ง และการคืน Query ใหม่จะไปแทนที่
+// where clause ของ client ทั้งก้อน วิธีที่ถูกต้องคือแก้ req.query เพื่อให้เงื่อนไขของ client ยังอยู่
+Parse.Cloud.beforeFind('SecurityAlert', async (req) => {
+  if (req.master) return;
+  if (!req.user) {
+    throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'ต้องมีสิทธิ์ก่อนอ่าน alert');
   }
-  throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'ต้องมีสิทธิ์ก่อนอ่าน alert');
+  // SecurityAnalyst ต้องเห็นทุก alert
+  if (await hasSecurityRole(req.user)) return;
+  // ผู้ใช้ทั่วไปเห็นเฉพาะ alert ที่ tagged ถึงตน
+  req.query.equalTo('userId', req.user.id);
 });
 
 // SecurityScan: เขียนได้เฉพาะ cloud code

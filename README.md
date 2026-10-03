@@ -42,7 +42,15 @@ cp .env.example .env
 
 ค่า `MASTER_KEY`, `REST_API_KEY` และ `CLIENT_KEY` ไม่ควรใช้ค่า `REPLACE_WITH_...` หรือค่าตัวอย่างจาก GitHub เด็ดขัด ไฟล์ `.env` ถูกอยู่ใน `.gitignore` และต้องไม่ commit หรือส่งขึ้น GitHub
 
-ค่า `MASTER_KEY_IPS` มีค่าเริ่มต้นสำหรับ localhost และ Docker host ของโปรเจกต์นี้ หาก Docker ใช้ network อื่น ให้ปรับค่านี้ใน `.env` ให้ตรงกับ gateway ที่ต้องการอนุญาต
+ค่า `MASTER_KEY_IPS` มีค่าเริ่มต้นสำหรับ localhost และ Docker host ของโปรเจกต์นี้ `docker-compose.yml` ตรึง subnet ของ Docker network ไว้ที่ `172.20.0.0/24` ทำให้ gateway อยู่ที่ `172.20.0.1` เสมอ และตรงกับค่าเริ่มต้นนี้
+
+ถ้าเครื่องของคุณมี Docker network อื่นใช้ subnet `172.20.0.0/24` อยู่แล้ว ให้เปลี่ยน `subnet` ใน `docker-compose.yml` เป็นช่วงที่ว่าง แล้วแก้ `MASTER_KEY_IPS` ใน `.env` ให้เป็น gateway ของ subnet ใหม่ (เช่น `172.21.0.1`) ตรวจค่าจริงได้ด้วย:
+
+```powershell
+docker network inspect parse-server-security_default --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'
+```
+
+ถ้าไม่ตรงจะใช้ `masterKey` จากเครื่องตัวเองไม่ได้ และจะได้ error `403 unauthorized`
 
 ### 3. เริ่มระบบทั้งหมด
 
@@ -110,6 +118,20 @@ docker compose exec app npm test
 
 ```text
 ===== สรุป: 29/29 ผ่าน =====
+===== สรุป: 38/38 ผ่าน =====
+```
+
+`npm test` รัน 2 ชุด
+
+| ชุด | ไฟล์ | ครอบคลุม |
+|---|---|---|
+| หลัก | `tests/verify-all.js` | health, signup/login, port scan, alert, quarantine, rate limit, การบล็อกเขียนตรง, Dashboard |
+| เสริม | `tests/verify-security.js` | Incident lifecycle, role `SecurityAnalyst`, ขอบเขตการอ่าน SecurityAlert, HTTP security headers, CORS, account lockout |
+
+รันเฉพาะชุดเสริม:
+
+```powershell
+docker compose exec app node tests/verify-security.js
 ```
 
 รันตัวอย่างการใช้งานระบบ:
@@ -150,7 +172,7 @@ request ที่มีคำว่า `[คาดว่าล้มเหลว
 |---|---|
 | `runPortScan` | สแกนพอร์ตแบบ TCP connect |
 | `assignSecurityAnalystRole` | เพิ่มผู้ใช้เข้า role `SecurityAnalyst` โดยใช้ `masterKey` เท่านั้น |
-| `createSecurityAlert` | สร้าง Security Alert |
+| `createSecurityAlert` | สร้าง Security Alert (ส่ง `userId` เพิ่มได้เพื่อ tag ผู้ใช้ที่เกี่ยวข้อง) |
 | `getSecurityReport` | สร้างสรุปสถานะความปลอดภัย |
 | `quarantineUser` | ล็อกผู้ใช้และยกเลิก session |
 | `unquarantineUser` | ปลดล็อกผู้ใช้ |
@@ -172,6 +194,8 @@ request ที่มีคำว่า `[คาดว่าล้มเหลว
 - ป้องกันการแก้ไขข้อมูลผู้ใช้รายอื่น
 - จำกัด `masterKey` ให้ใช้จาก localhost หรือ IP ที่กำหนดไว้ใน `MASTER_KEY_IPS` เป็นหลัก
 - ปกป้องฟิลด์สำคัญด้วย `protectedFields`
+- ผู้ใช้ทั่วไปอ่าน `SecurityAlert` ได้เฉพาะ alert ที่ tag ถึงตน ส่วน `SecurityAnalyst` อ่านได้ทั้งหมด
+- กักกันผู้ใช้แล้ว tag `SecurityAlert` ด้วย `userId` ของผู้ถูกกักกัน เพื่อให้เจ้าของเห็นและแก้ไขได้เฉพาะเรื่องของตน
 - เพิ่ม HTTP security headers ด้วย Helmet
 - จำกัด CORS ตาม `ALLOWED_ORIGINS`
 - ยกเลิก session เมื่อเปลี่ยนรหัสผ่านหรือกักกันผู้ใช้
@@ -213,6 +237,7 @@ MongoDB :27017
 | `api.http.simple` | ไฟล์ template REST requests ที่ไม่มีค่า secret สำหรับคัดลอกไปใช้งาน |
 | `api.http` | ไฟล์ local สำหรับ REST Client; ถูก ignore และห้าม commit |
 | `tests/verify-all.js` | ชุดทดสอบระบบ 29 รายการ |
+| `tests/verify-security.js` | ชุดทดสอบเสริม 38 รายการ (Incident, role `SecurityAnalyst`, HTTP hardening) |
 | `examples/demo-security.js` | ตัวอย่างการเรียกใช้ Cloud Functions |
 
 ## การทำงานแบบ Local (ไม่บังคับ)

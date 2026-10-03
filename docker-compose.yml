@@ -55,3 +55,12 @@ services:
 
 volumes:
   mongodb_data:
+
+networks:
+  default:
+    # ตรึง subnet ไว้ให้ gateway เป็น 172.20.0.1 เสมอ ตรงกับค่า MASTER_KEY_IPS ใน .env
+    # ถ้าเครื่องมี network อื่นใช้ subnet นี้อยู่แล้ว ให้เปลี่ยนเป็นช่วงอื่นที่ว่าง
+    # แล้วแก้ MASTER_KEY_IPS ใน .env ให้ตรงกับ gateway ของ subnet ใหม่
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
