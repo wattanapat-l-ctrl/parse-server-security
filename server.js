@@ -66,11 +66,20 @@ for (const key of requiredEnv) {
   }
 }
 
-// เตือนถ้ายังใช้ค่า default
-for (const key of ['MASTER_KEY', 'DASHBOARD_PASSWORD']) {
-  if (process.env[key] && process.env[key].includes('change_me_')) {
-    console.warn(`[WARN] ${key} ยังเป็นค่า default! กรุณาเปลี่ยนใน .env ก่อน deploy จริง`);
+// เตือนถ้ายังใช้ค่า default หรือค่าที่ยังไม่ถูกเปลี่ยน
+const WEAK_VALUES = ['change_me_', 'REPLACE_WITH', 'security_pass', 'security_user'];
+for (const key of ['MASTER_KEY', 'JAVASCRIPT_KEY', 'REST_API_KEY', 'CLIENT_KEY', 'DOT_NET_KEY', 'DASHBOARD_PASSWORD', 'MONGO_PASSWORD']) {
+  const value = process.env[key] || '';
+  if (WEAK_VALUES.some((weak) => value.includes(weak))) {
+    console.warn(`[WARN] ${key} ยังเป็นค่าตัวอย่าง! กรุณาเปลี่ยนใน .env ก่อน deploy จริง`);
   }
+}
+// เตือนเรื่องการยืนยันอีเมลและการสแกน
+if (process.env.VERIFY_USER_EMAILS === 'true' && !(process.env.MAILGUN_DOMAIN && process.env.MAILGUN_API_KEY)) {
+  console.warn('[WARN] VERIFY_USER_EMAILS=true แต่ยังไม่ได้ตั้ง MAILGUN_DOMAIN/MAILGUN_API_KEY — ผู้ใช้จะยืนยันอีเมลไม่ได้');
+}
+if (process.env.ALLOW_INSECURE_HTTP === 'true' && process.env.NODE_ENV === 'production') {
+  console.warn('[WARN] ALLOW_INSECURE_HTTP=true ใน production — ควรปิดและใช้ HTTPS');
 }
 
 const mountPath = process.env.MOUNT_PATH || '/parse';
@@ -105,7 +114,7 @@ const serverConfig = {
   // ฟิลด์ที่ client เอาไว้ read ต้องใช้ masterKey ถึงจะเห็นค่า
   protectedFields: {
     _User: {
-      '*': ['email', 'securityFlags'],
+      '*': ['email', 'securityFlags', 'accountLocked', 'lockedAt', 'lockedReason'],
     },
   },
   // เซสชันถูก revoke ทุกครั้งที่เปลี่ยน password
@@ -122,12 +131,14 @@ const serverConfig = {
     {
       requestPath: '/*',
       requestCount: Number(process.env.RATE_LIMIT_MAX || 500),
-      requestTimeWindow: 15 * 60 * 1000, // 500 request / 15 นาที / IP
+      requestTimeWindow: Number(process.env.RATE_LIMIT_WINDOW_MIN || 15) * 60 * 1000,
       includeInternalRequests: true,
     },
   ],
 
-  verifyUserEmails: false,
+  // ยืนยันอีเมลก่อนใช้งานจริง — ต้องมี mail adapter ด้วย ไม่งั้นผู้ใช้สมัครแล้ว login ไม่ได้
+  // ค่าเริ่มต้นเป็น false เพื่อให้รัน local/testing ได้ ให้ตั้ง VERIFY_USER_EMAILS=true ใน .env ตอน production
+  verifyUserEmails: process.env.VERIFY_USER_EMAILS === 'true',
   // false = คืน error เป็น JSON เสมอ (ไม่ render HTML error page) เหมาะกับ API
   enableExpressErrorHandler: false,
   // true = Parse.Object ที่ส่งเข้า Cloud Function จะถูกแปลงเป็น instance จริง (ค่า default ของ Parse Server คือ false)

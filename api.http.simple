@@ -1,131 +1,226 @@
-### ============================================================
-### Parse Server - Security API (template สำหรับ VS Code REST Client)
-### คัดลอกไฟล์นี้เป็น api.http ในเครื่อง แล้วกรอกค่า REPLACE_WITH_... ก่อนใช้งาน
-### ห้าม commit ไฟล์ api.http หรือค่า secret จริง
+﻿### ============================================================
+### Parse Server - Security API
+### เนเธเนเธเธฑเธ VS Code Extension: "REST Client" (humao.rest-client)
+### เธงเธดเธเธตเนเธเน: เธเธ” Send Request เนเธฅเนเธเธฒเธเธเธเธฅเธเธฅเนเธฒเธเธ•เธฒเธกเธฅเธณเธ”เธฑเธ
+### key เธ”เธถเธเธญเธฑเธ•เนเธเธกเธฑเธ•เธดเธเธฒเธ .env โ€” เธ•เนเธญเธเธกเธตเนเธเธฅเน .env เธญเธขเธนเนเนเธเนเธเธฃเน€เธเธเธ•เน
 ### ============================================================
 
 @host = http://localhost:1337
 @parseUrl = {{host}}/parse
-@appId = REPLACE_WITH_APP_ID
-@restKey = REPLACE_WITH_REST_API_KEY
-@masterKey = REPLACE_WITH_MASTER_KEY
-
-### Health Check
-# @name health
-GET {{host}}/health
-
-###
-
-### Health Check (Parse)
-# @name parseHealth
-GET {{parseUrl}}/health
-
-###
+@appId = {{$dotenv APP_ID}}
+@restKey = {{$dotenv REST_API_KEY}}
+@masterKey = {{$dotenv MASTER_KEY}}
 
 ### ============================================================
-### AUTH
+### เธชเธฒเธฃเธเธฑเธ
+###    1. USER   (REST API Key + Session Token)
+###    2. ADMIN  (Master Key)
+###
+### เธเนเธญเธเธงเธฃเธฃเธนเน
+### -  [เธ•เนเธญเธ fail] = เธฃเธฐเธเธเธเธงเธฃเธเธเธดเน€เธชเธ
+### -  เน€เธเธฅเธตเนเธขเธ password เนเธฅเนเธง token เน€เธเนเธฒเธเธฐเธ–เธนเธ revoke เธ—เธฑเธเธ—เธต
+### -  เธฃเธฑเธเธเนเธณเนเธ”เน เนเธ•เนเธ•เนเธญเธเน€เธเธฅเธตเนเธขเธ username เนเธเธเนเธญ 1.1 เนเธฅเธฐ 2.4
+### -  เธ•เนเธญเธเธฃเธฑเธ 1.1 เธเนเธญเธ 2.x เน€เธเธฃเธฒเธฐ 2.x เธญเนเธฒเธ userId เธเธฒเธเธเนเธญเธเธฑเนเธ
 ### ============================================================
 
-### สมัครผู้ใช้ใหม่
-# @name signUp
+
+### ============================================================
+### 1. USER
+### ============================================================
+
+### 1.1 เธชเธกเธฑเธเธฃเธเธนเนเนเธเน
+### เธ–เนเธฒเธฃเธฑเธเธเนเธณเนเธ”เน 400 username เธเนเธณ เนเธซเนเน€เธเธฅเธตเนเธขเธเธเธทเนเธญ/เธญเธตเน€เธกเธฅ
+# @name userSignUp
 POST {{parseUrl}}/users
 Content-Type: application/json
 X-Parse-Application-Id: {{appId}}
 X-Parse-REST-API-Key: {{restKey}}
 
 {
-  "username": "REPLACE_WITH_USERNAME",
+  "username": "REPLACE_WITH_YOUR_USERNAME",
   "password": "REPLACE_WITH_PASSWORD",
-  "email": "REPLACE_WITH_EMAIL"
+  "email": "REPLACE_WITH_YOUR_EMAIL"
 }
 
-###
-
-### ล็อกอินด้วยผู้ใช้ที่สมัครเมื่อกี้
-# @name login
+### เธฅเนเธญเธเธญเธดเธ โ€” token เนเธเนเธ•เนเธญเธ—เธตเน 1.2
+# @name userLogin
 POST {{parseUrl}}/login
 Content-Type: application/json
 X-Parse-Application-Id: {{appId}}
 X-Parse-REST-API-Key: {{restKey}}
 
 {
-  "username": "{{signUp.request.body.$.username}}",
-  "password": "{{signUp.request.body.$.password}}"
+  "username": "REPLACE_WITH_YOUR_USERNAME",
+  "password": "REPLACE_WITH_PASSWORD"
 }
 
 ###
 
-### ล็อกอินด้วย masterKey
-# @name loginMaster
-POST {{parseUrl}}/login
-Content-Type: application/json
-X-Parse-Application-Id: {{appId}}
-X-Parse-Master-Key: {{masterKey}}
-
-{
-  "username": "{{signUp.request.body.$.username}}",
-  "password": "{{signUp.request.body.$.password}}"
-}
-
-###
-
-### ดึงข้อมูล user ปัจจุบัน
-# @name currentUser
+### 1.2 เนเธเธฃเนเธเธฅเนเธเธนเนเนเธเน
+### เธ”เธนเธเนเธญเธกเธนเธฅเธ•เธฑเธงเน€เธญเธ
 GET {{parseUrl}}/users/me
 X-Parse-Application-Id: {{appId}}
 X-Parse-REST-API-Key: {{restKey}}
-X-Parse-Session-Token: {{login.response.body.sessionToken}}
+X-Parse-Session-Token: {{userLogin.response.body.sessionToken}}
+
+### เนเธเนเนเธเธฃเนเธเธฅเนเธ•เธฑเธงเน€เธญเธ
+### (Parse 7 เนเธเน PUT /users/:objectId โ€” PUT /users/me เนเธกเนเธฃเธญเธเธฃเธฑเธ)
+PUT {{parseUrl}}/users/{{userLogin.response.body.objectId}}
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{userLogin.response.body.sessionToken}}
+
+{
+  "nickname": "txm-ops"
+}
 
 ###
 
-### เพิ่มผู้ใช้เข้า role SecurityAnalyst (ใช้ masterKey เท่านั้น)
-# @name assignAnalystRole
+### 1.3 เน€เธเธฅเธตเนเธขเธเธฃเธซเธฑเธชเธเนเธฒเธ
+### เนเธเน token เธเธฒเธ 1.1 เนเธ”เนเน€เธฅเธข เนเธกเนเธ•เนเธญเธ login เนเธซเธกเน
+### เธเธฅเธฅเธฑเธเธเนเธเธทเธ sessionToken เนเธซเธกเน เธชเนเธงเธ token เน€เธ”เธดเธกเธ–เธนเธ revoke เธ—เธฑเธเธ—เธต
+# @name userChangePassword
+PUT {{parseUrl}}/users/{{userLogin.response.body.objectId}}
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{userLogin.response.body.sessionToken}}
+
+{
+  "password": "REPLACE_WITH_NEW_PASSWORD"
+}
+
+### [เธ•เนเธญเธ fail] เธฅเนเธญเธเธญเธดเธเธ”เนเธงเธขเธฃเธซเธฑเธชเธเนเธฒเธเน€เธเนเธฒ
+POST {{parseUrl}}/login
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+
+{
+  "username": "REPLACE_WITH_YOUR_USERNAME",
+  "password": "REPLACE_WITH_PASSWORD"
+}
+
+###
+
+### 1.4 Session
+### เธเนเธญ 1.4 เน€เธเนเธเธ•เนเธเนเธเนเธเน {{userChangePassword.response.body.sessionToken}}
+### เธ”เธน session เธเธฑเธเธเธธเธเธฑเธ
+GET {{parseUrl}}/sessions/me
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{userChangePassword.response.body.sessionToken}}
+
+### เธ”เธน SecurityAlert เธเธญเธเธ•เธฑเธงเน€เธญเธ (เธเธฃเธญเธเธ”เนเธงเธข userId เนเธซเนเธญเธฑเธ•เนเธเธกเธฑเธ•เธด)
+GET {{parseUrl}}/classes/SecurityAlert?order=-createdAt&limit=10
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{userChangePassword.response.body.sessionToken}}
+
+###
+
+### 1.5 เธญเนเธฒเธเธเนเธญเธกเธนเธฅเธเธญเธเธ•เธฑเธงเน€เธญเธ
+### เธ”เธนเธเธนเนเนเธเนเธ—เธฑเนเธเธซเธกเธ” (enforcePrivateUsers โ€” เน€เธซเนเธเนเธเนเธ•เธฑเธงเน€เธญเธ)
+GET {{parseUrl}}/users
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{userChangePassword.response.body.sessionToken}}
+
+### เธ”เธน session เธเธญเธเธ•เธฑเธงเน€เธญเธเธ—เธฑเนเธเธซเธกเธ”
+GET {{parseUrl}}/sessions?order=-createdAt&limit=20
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{userChangePassword.response.body.sessionToken}}
+
+###
+
+### 1.6 เน€เธ—เธชเธ•เน: เธ—เธตเนเธเธนเนเนเธเนเธ—เธฑเนเธงเนเธเธ•เนเธญเธเธ–เธนเธเธเธเธดเน€เธชเธ
+### [เธ•เนเธญเธ fail] เนเธเนเธเนเธญเธกเธนเธฅเธเธนเนเนเธเนเธเธเธญเธทเนเธ
+PUT {{parseUrl}}/users/AAAAAAAAAAAAAAAAAAAA
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{userChangePassword.response.body.sessionToken}}
+
+{
+  "nickname": "hacked"
+}
+
+### [เธ•เนเธญเธ fail] เธเธฅเธ”เธฅเนเธญเธเธ•เธฑเธงเน€เธญเธเน€เธญเธ
+PUT {{parseUrl}}/users/{{userLogin.response.body.objectId}}
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{userChangePassword.response.body.sessionToken}}
+
+{
+  "accountLocked": false
+}
+
+### [เธ•เนเธญเธ fail] เน€เธเธตเธขเธ SecurityLog เธ•เธฃเธ เน (append-only)
+POST {{parseUrl}}/classes/SecurityLog
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{userChangePassword.response.body.sessionToken}}
+
+{
+  "event": "fake_hack_event"
+}
+
+### [เธ•เนเธญเธ fail] เธญเนเธฒเธ SecurityLog (เธ•เนเธญเธเน€เธเนเธ analyst)
+GET {{parseUrl}}/classes/SecurityLog?limit=5
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{userChangePassword.response.body.sessionToken}}
+
+### [เธ•เนเธญเธ fail] เนเธซเนเธชเธดเธ—เธเธดเนเธ•เธฑเธงเน€เธญเธเน€เธเนเธ SecurityAnalyst
+POST {{parseUrl}}/functions/assignSecurityAnalystRole
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{userChangePassword.response.body.sessionToken}}
+
+{
+  "userId": "{{userSignUp.response.body.objectId}}"
+}
+
+###
+
+### ============================================================
+### 2. ADMIN  (Master Key)
+### ============================================================
+
+### 2.1 เธเธฑเธ”เธเธฒเธฃเธชเธดเธ—เธเธดเน (Role)
+### เน€เธเธดเนเธกเธเธนเนเนเธเนเธเธฒเธเธเนเธญ 1.1 เน€เธเนเธฒ role SecurityAnalyst
 POST {{parseUrl}}/functions/assignSecurityAnalystRole
 Content-Type: application/json
 X-Parse-Application-Id: {{appId}}
 X-Parse-Master-Key: {{masterKey}}
 
 {
-  "userId": "{{signUp.response.body.objectId}}"
+  "userId": "{{userSignUp.response.body.objectId}}"
 }
 
-###
-
-### ล็อกอินหลังได้ role
-# @name loginAnalyst
+### เธฅเนเธญเธเธญเธดเธเนเธซเธกเนเน€เธเธทเนเธญเธฃเธฑเธ session เธ—เธตเนเธกเธต role (role เนเธซเธฅเธ”เธ•เธญเธ login เน€เธ—เนเธฒเธเธฑเนเธ)
+### เธฃเธซเธฑเธชเธเนเธฒเธเธ•เนเธญเธเธ•เธฃเธเธเธฑเธเธ—เธตเนเน€เธเธฅเธตเนเธขเธเนเธเธเนเธญ 1.3
+# @name analystLogin
 POST {{parseUrl}}/login
 Content-Type: application/json
 X-Parse-Application-Id: {{appId}}
 X-Parse-REST-API-Key: {{restKey}}
 
 {
-  "username": "{{signUp.request.body.$.username}}",
-  "password": "{{signUp.request.body.$.password}}"
+  "username": "REPLACE_WITH_YOUR_USERNAME",
+  "password": "REPLACE_WITH_NEW_PASSWORD"
 }
 
 ###
 
-### สร้างผู้ใช้เป้าหมายสำหรับทดสอบ quarantine
-# @name quarantineTarget
-POST {{parseUrl}}/users
-Content-Type: application/json
-X-Parse-Application-Id: {{appId}}
-X-Parse-REST-API-Key: {{restKey}}
-
-{
-  "username": "REPLACE_WITH_TARGET_USERNAME",
-  "password": "REPLACE_WITH_TARGET_PASSWORD",
-  "email": "REPLACE_WITH_TARGET_EMAIL"
-}
-
-###
-
-### ============================================================
-### SECURITY FUNCTIONS (masterKey หรือ role SecurityAnalyst)
-### ============================================================
-
-### สแกนพอร์ตด้วย masterKey
-# @name portScan
+### 2.2 Port Scan
+### เธชเนเธเธเธเธญเธฃเนเธ•เธ”เนเธงเธข Master Key โ€” เธ–เนเธฒเธเธเธเธญเธฃเนเธ•เน€เธเธดเธ”เธเธฐเธชเธฃเนเธฒเธ Alert เนเธซเนเธญเธฑเธ•เนเธเธกเธฑเธ•เธด
+### (เธชเนเธเธเนเธ”เนเน€เธเธเธฒเธฐ loopback เน€เธงเนเธเนเธ•เนเธ•เธฑเนเธ SCAN_ALLOWED_HOSTS)
 POST {{parseUrl}}/functions/runPortScan
 Content-Type: application/json
 X-Parse-Application-Id: {{appId}}
@@ -133,14 +228,27 @@ X-Parse-Master-Key: {{masterKey}}
 
 {
   "host": "127.0.0.1",
-  "ports": [22, 80, 443, 1337, 27017, 4040, 8080, 8443],
-  "timeoutMs": 1500
+  "ports": [80, 443, 1337, 27017],
+  "timeoutMs": 1000
+}
+
+### [เธ•เนเธญเธ fail] เธชเนเธเธ host เธเธญเธ allowlist
+POST {{parseUrl}}/functions/runPortScan
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "host": "203.0.113.10",
+  "ports": [80],
+  "timeoutMs": 500
 }
 
 ###
 
-### สร้าง Security Alert
-# @name createAlert
+### 2.3 Security Alert
+### เธชเธฃเนเธฒเธ Alert เธฃเธฐเธ”เธฑเธ high
+# @name adminCreateAlert
 POST {{parseUrl}}/functions/createSecurityAlert
 Content-Type: application/json
 X-Parse-Application-Id: {{appId}}
@@ -148,18 +256,157 @@ X-Parse-Master-Key: {{masterKey}}
 
 {
   "severity": "high",
-  "title": "REPLACE_WITH_ALERT_TITLE",
-  "details": {
-    "sourceIp": "REPLACE_WITH_SOURCE_IP",
-    "attempts": 0,
-    "service": "REPLACE_WITH_SERVICE"
-  }
+  "title": "เธเธเธเธฒเธฃเธเธขเธฒเธขเธฒเธก brute-force SSH เธเธฒเธ 203.0.113.10",
+  "details": { "sourceIp": "203.0.113.10", "attempts": 142 }
+}
+
+### เธเธนเธ Alert เธเธฑเธเธเธนเนเนเธเน โ€” cloud function เน€เธเธตเธขเธ userId เนเธกเนเนเธ”เน เธ•เนเธญเธเนเธเน masterKey เธเนเธฒเธ REST
+### เธซเธฅเธฑเธเธเธฒเธเธเธตเนเธเธนเนเนเธเนเธเธฐเน€เธซเนเธ Alert เธเธตเนเนเธเธเนเธญ 1.4
+PUT {{parseUrl}}/classes/SecurityAlert/{{adminCreateAlert.response.body.result.objectId}}
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "userId": "{{userSignUp.response.body.objectId}}"
+}
+
+### เธเธดเธ” Alert
+POST {{parseUrl}}/functions/updateAlertStatus
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "alertId": "{{adminCreateAlert.response.body.result.objectId}}",
+  "status": "resolved",
+  "note": "เธ•เธฃเธงเธเนเธฅเธฐเนเธเธ—เธเนเนเธฅเนเธง"
+}
+
+### [เธ•เนเธญเธ fail] เนเธเน severity เธ—เธตเนเนเธกเนเธฃเธนเนเธเธฑเธ
+POST {{parseUrl}}/functions/createSecurityAlert
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "severity": "urgent",
+  "title": "เธ—เธ”เธชเธญเธ severity เธเธดเธ”"
 }
 
 ###
 
-### รายงานสถานะความปลอดภัย
-# @name securityReport
+### 2.4 Incident Management
+### เธชเธฃเนเธฒเธ Incident เธเธฒเธ Alert (Alert เน€เธ”เธตเธขเธงเธชเธฃเนเธฒเธเนเธ”เนเธเธฃเธฑเนเธเน€เธ”เธตเธขเธง)
+# @name adminCreateIncident
+POST {{parseUrl}}/functions/createIncident
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "alertId": "{{adminCreateAlert.response.body.result.objectId}}",
+  "title": "IR-0001 Brute-force SSH",
+  "description": "เธ•เธฃเธงเธเธชเธญเธ log เนเธฅเธฐ block เธ—เธตเน firewall"
+}
+
+### เธกเธญเธเธซเธกเธฒเธข + เน€เธเธดเนเธก note + เธเธดเธ” incident
+POST {{parseUrl}}/functions/assignIncident
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "incidentId": "{{adminCreateIncident.response.body.result.id}}",
+  "assignedTo": "{{userSignUp.response.body.objectId}}"
+}
+
+###
+
+POST {{parseUrl}}/functions/addIncidentNote
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "incidentId": "{{adminCreateIncident.response.body.result.id}}",
+  "note": "brute-force เธซเธขเธธเธ”เนเธฅเนเธง เธเธดเธ” account เธ—เธตเนเนเธ”เธเนเธเธกเธ•เธตเน€เธฃเธตเธขเธเธฃเนเธญเธข"
+}
+
+###
+
+POST {{parseUrl}}/functions/updateIncidentStatus
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "incidentId": "{{adminCreateIncident.response.body.result.id}}",
+  "status": "resolved"
+}
+
+### [เธ•เนเธญเธ fail] เนเธเน status เธ—เธตเนเนเธกเนเธฃเธนเนเธเธฑเธ
+POST {{parseUrl}}/functions/updateIncidentStatus
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "incidentId": "{{adminCreateIncident.response.body.result.id}}",
+  "status": "closed"
+}
+
+###
+
+### 2.5 Quarantine เธเธนเนเนเธเน
+### เธชเธฃเนเธฒเธเธเธนเนเนเธเนเน€เธเนเธฒเธซเธกเธฒเธข (username เธเนเธณเธเธฐ error โ€” เน€เธเธฅเธตเนเธขเธเธเธทเนเธญเธ–เนเธฒเธฃเธฑเธเธเนเธณ)
+# @name adminCreateTargetUser
+POST {{parseUrl}}/users
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "username": "REPLACE_WITH_TARGET_USERNAME",
+  "password": "REPLACE_WITH_TARGET_PASSWORD"
+}
+
+### เธเธฑเธเธเธฑเธเธเธนเนเนเธเน = เธฅเนเธญเธเธเธฑเธเธเธต + เธขเธเน€เธฅเธดเธ session เธ—เธฑเนเธเธซเธกเธ”
+POST {{parseUrl}}/functions/quarantineUser
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "userId": "{{adminCreateTargetUser.response.body.objectId}}",
+  "reason": "เธ–เธนเธเธ•เธฃเธงเธเธเธ automated scan เธเธฒเธเธซเธฅเธฒเธข IP"
+}
+
+### [เธ•เนเธญเธ fail] เธเธนเนเนเธเนเธ—เธตเนเธ–เธนเธเธเธฑเธเธเธฑเธเธฅเนเธญเธเธญเธดเธเนเธกเนเนเธ”เน
+POST {{parseUrl}}/login
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+
+{
+  "username": "REPLACE_WITH_TARGET_USERNAME",
+  "password": "REPLACE_WITH_TARGET_PASSWORD"
+}
+
+### เธเธฅเธ”เธฅเนเธญเธ เนเธฅเนเธงเธฅเนเธญเธเธญเธดเธเนเธ”เนเธญเธตเธเธเธฃเธฑเนเธ (เธขเธทเธเธขเธฑเธเธงเนเธฒเธเธฑเธเธเธฑเธเธ–เธนเธเธขเนเธญเธเธเธฅเธฑเธ)
+POST {{parseUrl}}/functions/unquarantineUser
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
+
+{
+  "userId": "{{adminCreateTargetUser.response.body.objectId}}"
+}
+
+###
+
+### 2.6 เธฃเธฒเธขเธเธฒเธเธชเธฃเธธเธ
+### riskLevel = CRITICAL เธ–เนเธฒเธกเธต critical เธ—เธตเนเธขเธฑเธเนเธกเน resolved
 POST {{parseUrl}}/functions/getSecurityReport
 Content-Type: application/json
 X-Parse-Application-Id: {{appId}}
@@ -167,169 +414,94 @@ X-Parse-Master-Key: {{masterKey}}
 
 {}
 
-###
-
-### เปลี่ยนสถานะ Alert ที่สร้างเมื่อกี้
-# @name updateAlert
-POST {{parseUrl}}/functions/updateAlertStatus
+### เธฃเธฒเธขเธเธฒเธเน€เธ”เธตเธขเธงเธเธฑเธเธ”เนเธงเธข session เธเธญเธ SecurityAnalyst (เนเธกเนเนเธเน masterKey)
+POST {{parseUrl}}/functions/getSecurityReport
 Content-Type: application/json
 X-Parse-Application-Id: {{appId}}
-X-Parse-Master-Key: {{masterKey}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{analystLogin.response.body.sessionToken}}
 
-{
-  "alertId": "{{createAlert.response.body.result.objectId}}",
-  "status": "resolved",
-  "note": "REPLACE_WITH_RESOLUTION_NOTE"
-}
+{}
 
 ###
 
-### กักกันผู้ใช้เป้าหมาย
-# @name quarantine
-POST {{parseUrl}}/functions/quarantineUser
-Content-Type: application/json
-X-Parse-Application-Id: {{appId}}
-X-Parse-Master-Key: {{masterKey}}
-
-{
-  "userId": "{{quarantineTarget.response.body.objectId}}",
-  "reason": "REPLACE_WITH_QUARANTINE_REASON"
-}
-
-###
-
-### ปลดล็อกผู้ใช้เป้าหมาย
-# @name unquarantine
-POST {{parseUrl}}/functions/unquarantineUser
-Content-Type: application/json
-X-Parse-Application-Id: {{appId}}
-X-Parse-Master-Key: {{masterKey}}
-
-{
-  "userId": "{{quarantineTarget.response.body.objectId}}"
-}
-
-###
-
-### ============================================================
-### QUERY (masterKey)
-### ============================================================
-
-### ดึง SecurityAlert ทั้งหมด
-# @name queryAlerts
-GET {{parseUrl}}/classes/SecurityAlert
-X-Parse-Application-Id: {{appId}}
-X-Parse-Master-Key: {{masterKey}}
-
-###
-
-### ดึง SecurityScan ล่าสุด 10 รายการ
-# @name queryScans
-GET {{parseUrl}}/classes/SecurityScan?order=-createdAt&limit=10
-X-Parse-Application-Id: {{appId}}
-X-Parse-Master-Key: {{masterKey}}
-
-###
-
-### ดึง SecurityLog ล่าสุด 20 รายการ
-# @name queryLogs
+### 2.7 Audit Log & เธเนเธญเธกเธนเธฅเธ”เธดเธ
+### เธ”เธน SecurityLog เธฅเนเธฒเธชเธธเธ”
 GET {{parseUrl}}/classes/SecurityLog?order=-createdAt&limit=20
 X-Parse-Application-Id: {{appId}}
 X-Parse-Master-Key: {{masterKey}}
 
-###
+### เธ”เธนเธเธฅเธชเนเธเธเธฅเนเธฒเธชเธธเธ”
+GET {{parseUrl}}/classes/SecurityScan?order=-createdAt&limit=10
+X-Parse-Application-Id: {{appId}}
+X-Parse-Master-Key: {{masterKey}}
 
-### ============================================================
-### REST แบบใช้ session token ของ SecurityAnalyst
-### ============================================================
-
-### รัน port scan โดยใช้ session
-# @name portScanWithSession
-POST {{parseUrl}}/functions/runPortScan
+### เธฅเนเธญเธเธญเธดเธเนเธ—เธเธเธนเนเนเธเน (loginAs)
+POST {{parseUrl}}/loginAs
 Content-Type: application/json
 X-Parse-Application-Id: {{appId}}
-X-Parse-REST-API-Key: {{restKey}}
-X-Parse-Session-Token: {{loginAnalyst.response.body.sessionToken}}
+X-Parse-Master-Key: {{masterKey}}
 
 {
-  "host": "127.0.0.1",
-  "ports": [80, 443, 1337],
-  "timeoutMs": 1000
+  "userId": "{{userSignUp.response.body.objectId}}"
 }
 
 ###
 
-### ดึง alert ของ user ปัจจุบัน
-# @name myAlerts
-GET {{parseUrl}}/classes/SecurityAlert
-X-Parse-Application-Id: {{appId}}
-X-Parse-REST-API-Key: {{restKey}}
-X-Parse-Session-Token: {{loginAnalyst.response.body.sessionToken}}
-
-###
-
-### แก้ profile ตัวเอง
-# @name updateProfile
-PUT {{parseUrl}}/users/{{loginAnalyst.response.body.objectId}}
-Content-Type: application/json
-X-Parse-Application-Id: {{appId}}
-X-Parse-REST-API-Key: {{restKey}}
-X-Parse-Session-Token: {{loginAnalyst.response.body.sessionToken}}
-
-{
-  "securityFlags": {
-    "twoFactorEnabled": true
-  }
-}
-
-###
-
-### ============================================================
-### TESTS: request เหล่านี้คาดว่าจะถูกปฏิเสธ
-### ============================================================
-
-### [คาดว่าล้มเหลว] client เขียน SecurityLog ตรง ๆ ไม่ผ่าน
-# @name blockLogWrite
-POST {{parseUrl}}/classes/SecurityLog
-Content-Type: application/json
-X-Parse-Application-Id: {{appId}}
-X-Parse-REST-API-Key: {{restKey}}
-
-{
-  "event": "REPLACE_WITH_TEST_EVENT",
-  "meta": {}
-}
-
-###
-
-### [คาดว่าล้มเหลว] client สร้าง class ใหม่ไม่ผ่าน
-# @name blockClassCreation
-POST {{parseUrl}}/classes/NewForbiddenClass
-Content-Type: application/json
-X-Parse-Application-Id: {{appId}}
-X-Parse-REST-API-Key: {{restKey}}
-
-{
-  "foo": "bar"
-}
-
-###
-
-### [คาดว่าล้มเหลว] masterKey จาก IP ที่ไม่ใช่ localhost
-# @name blockMasterKeyFromRemote
+### 2.8 เน€เธ—เธชเธ•เน: เธเธฒเธฃเธเธงเธเธเธธเธกเธเธฒเธฃเน€เธเนเธฒเธ–เธถเธ
+### [เธ•เนเธญเธ fail] Master Key เธกเธฒเธเธฒเธ IP เธ—เธตเนเนเธกเนเนเธเน localhost
 GET {{parseUrl}}/classes/SecurityAlert
 X-Parse-Application-Id: {{appId}}
 X-Parse-Master-Key: {{masterKey}}
 X-Forwarded-For: 203.0.113.10
 
+### [เธ•เนเธญเธ fail] REST key เธเธดเธ”
+GET {{parseUrl}}/classes/SecurityAlert
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: wrong-key-000
+
+### [เธ•เนเธญเธ fail] เน€เธฃเธตเธขเธ cloud function เนเธ”เธขเนเธกเนเธฅเนเธญเธเธญเธดเธ
+POST {{parseUrl}}/functions/runPortScan
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+
+{
+  "host": "127.0.0.1",
+  "ports": [80],
+  "timeoutMs": 300
+}
+
+### [เธ•เนเธญเธ fail] เนเธซเนเธชเธดเธ—เธเธดเนเนเธ”เธขเนเธกเนเนเธเน masterKey
+POST {{parseUrl}}/functions/assignSecurityAnalystRole
+Content-Type: application/json
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{analystLogin.response.body.sessionToken}}
+
+{
+  "userId": "{{userSignUp.response.body.objectId}}"
+}
+
+### [เธ•เนเธญเธ fail] เธญเนเธฒเธ SecurityLog / SecurityScan เนเธ”เธขเธกเธตเนเธเน REST key
+GET {{parseUrl}}/classes/SecurityLog?limit=5
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+
 ###
 
-### ออกจากระบบ
-# @name logout
+### 2.9 เธเธดเธ” session
+### เธญเธญเธเธเธฒเธเธฃเธฐเธเธ (session เธเธญเธ SecurityAnalyst)
 POST {{parseUrl}}/logout
 Content-Type: application/json
 X-Parse-Application-Id: {{appId}}
 X-Parse-REST-API-Key: {{restKey}}
-X-Parse-Session-Token: {{loginAnalyst.response.body.sessionToken}}
+X-Parse-Session-Token: {{analystLogin.response.body.sessionToken}}
 
 {}
+
+### เธขเธทเธเธขเธฑเธเธงเนเธฒ session เธ–เธนเธเธเธดเธ”เนเธฅเนเธง
+GET {{parseUrl}}/users/me
+X-Parse-Application-Id: {{appId}}
+X-Parse-REST-API-Key: {{restKey}}
+X-Parse-Session-Token: {{analystLogin.response.body.sessionToken}}

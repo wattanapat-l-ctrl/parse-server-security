@@ -125,6 +125,22 @@ Parse.Cloud.define('addIncidentNote', async (req) => {
 
   const notes = incident.get('notes') || [];
 
+  const maxNotes = Number(process.env.INCIDENT_MAX_NOTES || 100);
+  if (notes.length >= maxNotes) {
+    throw new Parse.Error(
+      Parse.Error.VALIDATION_ERROR,
+      `ใส่ note ได้ไม่เกิน ${maxNotes} รายการต่อ incident`
+    );
+  }
+
+  const maxNoteLength = Number(process.env.INCIDENT_MAX_NOTE_LENGTH || 2000);
+  if (String(note).length > maxNoteLength) {
+    throw new Parse.Error(
+      Parse.Error.VALIDATION_ERROR,
+      `note ยาวเกิน ${maxNoteLength} ตัวอักษร`
+    );
+  }
+
   notes.push({
     message: note,
     createdAt: new Date().toISOString()

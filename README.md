@@ -38,7 +38,13 @@ cp .env.example .env
 - `JAVASCRIPT_KEY`
 - `REST_API_KEY`
 - `CLIENT_KEY`
+- `DOT_NET_KEY`
+- `MONGO_PASSWORD`
 - `DASHBOARD_PASSWORD`
+
+ไฟล์ `.env.example` มีตัวแปรอื่นที่ตั้งค่าได้ตามต้องการ เช่น `ALLOWED_ORIGINS`, `ACCOUNT_LOCKOUT_THRESHOLD`, `RATE_LIMIT_MAX`, `SCAN_ALLOWED_HOSTS`, `VERIFY_USER_EMAILS` และ `ALLOW_INSECURE_HTTP` ดูค่าเริ่มต้นและคำอธิบายได้ในไฟล์ตัวอย่าง
+
+เซิร์ฟเวอร์จะพิมพ์คำเตือนตอนเริ่มทำงานถ้าพบว่าค่าใดยังเป็นค่าตัวอย่าง (`REPLACE_WITH`, `change_me_`, `security_pass`) หรือถ้าเปิด `ALLOW_INSECURE_HTTP=true` ในโหมด production
 
 ค่า `MASTER_KEY`, `REST_API_KEY` และ `CLIENT_KEY` ไม่ควรใช้ค่า `REPLACE_WITH_...` หรือค่าตัวอย่างจาก GitHub เด็ดขัด ไฟล์ `.env` ถูกอยู่ใน `.gitignore` และต้องไม่ commit หรือส่งขึ้น GitHub
 
@@ -109,8 +115,16 @@ docker compose exec app npm test
 ผลลัพธ์ที่ถูกต้องคือ:
 
 ```text
-===== สรุป: 29/29 ผ่าน =====
+===== สรุป: 52/52 ผ่าน =====
 ```
+
+ชุดทดสอบครอบคลุม 5 ส่วน:
+
+- การเข้าถึงพื้นฐาน health check, signup, login, session และ Dashboard
+- การควบคุมสิทธิ์ ทั้งการปฏิเสธผู้ไม่มี role และการทำงานของ role `SecurityAnalyst`
+- Cloud Functions ทั้ง port scan, alert, incident, quarantine และรายงานสรุป รวมถึงเคสที่ต้องถูกปฏิเสธ
+- ช่องโหว่ที่เคยพบและปิดแล้ว เช่น การอ่าน SecurityLog/SecurityScan ด้วย REST key เปล่า ๆ และการแก้ฟิลด์ `accountLocked` เอง
+- ความปลอดภัยของระบบ rate limit, allowlist ของ port scan และการไม่มีค่า placeholder ใน `.env`
 
 รันตัวอย่างการใช้งานระบบ:
 
@@ -128,19 +142,36 @@ docker compose exec app node examples/demo-security.js
 Copy-Item api.http.simple api.http
 ```
 
-เปิด `api.http` ใน VS Code แล้วแก้ค่า `REPLACE_WITH_...` และข้อมูลตัวอย่างให้เป็นค่าของคุณ จากนั้นกด **Send Request** ให้ request ไล่จากบนลงล่างตามลำดับ เพราะบาง request ใช้ผลลัพธ์จาก request ก่อนหน้า
+เปิด `api.http` ใน VS Code แล้วแก้เฉพาะค่าที่เป็น `REPLACE_WITH_...` ได้แก่ username, email และรหัสผ่าน ส่วน key ทั้งหมดดึงจาก `.env` ด้วย `{{$dotenv ...}}` จึงไม่ต้องกรอกเอง
 
-ไฟล์ `api.http` ถูกเพิ่มใน `.gitignore` และไม่ควร commit ลง GitHub ส่วน `api.http.simple` เป็นไฟล์ template ที่ปลอดภัยสำหรับ repository
+จากนั้นกด **Send Request** ให้ request ไล่จากบนลงล่างตามลำดับ เพราะบาง request ใช้ผลลัพธ์จาก request ก่อนหน้า
 
-เริ่มจาก request นี้ก่อน:
+ตรวจว่าเชื่อมต่อได้ก่อนใช้:
 
 ```http
-GET {{host}}/health
+GET http://localhost:1337/health
 ```
 
 ถ้าเห็น `{"status":"ok"}` แสดงว่า VS Code เชื่อมต่อกับ server ได้แล้ว
 
-request ที่มีคำว่า `[คาดว่าล้มเหลว]` เป็น security tests และควรได้รับการปฏิเสธตามที่ระบุ ไม่ใช่ข้อผิดพลาดของไฟล์ตัวอย่าง
+ไฟล์ `api.http` ถูกเพิ่มใน `.gitignore` และไม่ควร commit ลง GitHub ส่วน `api.http.simple` เป็นไฟล์ template ที่ปลอดภัยสำหรับ repository และมีโครงสร้างเดียวกับ `api.http` ทุกหัวข้อ
+
+### โครงสร้างของไฟล์
+
+| หัวข้อ | รายการ | เนื้อหา |
+|---|---|---|
+| `1.1`–`1.5` | 10 | สมัคร ล็อกอิน แก้โปรไฟล์ เปลี่ยนรหัส ดู session และอ่านข้อมูลตัวเอง |
+| `1.6` | 5 | กรณีที่ผู้ใช้ทั่วไปต้องถูกปฏิเสธ |
+| `2.1`–`2.9` | 29 | role, port scan, alert, incident, quarantine, รายงาน, audit log, access control และปิด session |
+
+request ที่มีคำว่า `[ต้อง fail]` เป็น security tests และควรได้รับการปฏิเสธตามที่ระบุ ไม่ใช่ข้อผิดพลาดของไฟล์ตัวอย่าง
+
+ข้อควรรู้:
+
+- ข้อ `1.3` เปลี่ยนรหัสผ่านแล้ว token เดิมจะถูก revoke ทันที ข้อ `1.4` เป็นต้นไปจึงใช้ token ใหม่จาก response
+- `aggregate` รับเฉพาะ `GET` และต้อง URL-encode ค่า `pipeline` แล้ว
+- ถ้ารันซ้ำต้องเปลี่ยน `username` ในข้อ `1.1` และ `2.5`
+- สแกนพอร์ตได้เฉพาะ loopback เว้นแต่ตั้ง `SCAN_ALLOWED_HOSTS`
 
 ## ระบบทำอะไรได้บ้าง
 
@@ -176,7 +207,14 @@ request ที่มีคำว่า `[คาดว่าล้มเหลว
 - จำกัด CORS ตาม `ALLOWED_ORIGINS`
 - ยกเลิก session เมื่อเปลี่ยนรหัสผ่านหรือกักกันผู้ใช้
 - ป้องกัน client เขียน Security Log, Alert, Scan และ Incident โดยตรง
-- อนุญาตให้อ่าน SecurityIncident เฉพาะ `masterKey` หรือ role `SecurityAnalyst`
+- อ่าน Security Log, Scan, Incident, Alert และรายงานสรุปได้เฉพาะ `masterKey` หรือ role `SecurityAnalyst` เท่านั้น
+- ป้องกันผู้ใช้ตั้งหรือปลด `accountLocked` ด้วยตัวเอง รวมถึงซ่อนฟิลด์นี้จาก client ด้วย `protectedFields`
+- จำกัดจุดที่สแกนพอร์ตได้ เป็น loopback เว้นแต่เพิ่มใน `SCAN_ALLOWED_HOSTS`
+- จำกัดจำนวน note ต่อ incident และความยาวของแต่ละ note
+- เตือนเมื่อ `.env` ยังมีค่าตัวอย่างอยู่ หรือเปิดค่าไม่ปลอดภัยใน production
+
+> ค่า `SCAN_ALLOWED_HOSTS` เว้นว่างไว้ได้ ระบบจะอนุญาณเฉพาะ `localhost`, `127.0.0.1` และ `::1`
+> ถ้าต้องสแกนเครื่องอื่นในเครือข่าย ให้เพิ่ม IP ลงใน `SCAN_ALLOWED_HOSTS` หรือตั้ง `SCAN_ALLOW_PRIVATE=true`
 
 > ค่า `MASTER_KEY_IPS` ใน `.env` เว้นว่างไว้ได้ เพราะ `server.js` จะใช้ค่า default
 > `127.0.0.1,::1,172.20.0.1` ให้อัตโนมัติ แต่ถ้าตั้งค่าเองต้องใส่เป็นรายการคั่นด้วย `,`
@@ -210,9 +248,9 @@ MongoDB :27017
 | `Dockerfile` | สร้าง image ของ Parse Server |
 | `.env.example` | ตัวอย่างค่าตั้งค่า |
 | `.env` | ค่าจริงและ secret ของเครื่อง ห้าม commit |
-| `api.http.simple` | ไฟล์ template REST requests ที่ไม่มีค่า secret สำหรับคัดลอกไปใช้งาน |
-| `api.http` | ไฟล์ local สำหรับ REST Client; ถูก ignore และห้าม commit |
-| `tests/verify-all.js` | ชุดทดสอบระบบ 29 รายการ |
+| `api.http.simple` | ไฟล์ template REST requests 44 รายการ ที่ไม่มีค่า secret สำหรับคัดลอกไปใช้งาน |
+| `api.http` | ไฟล์ local สำหรับ REST Client ชุดเดียวกับ template; ถูก ignore และห้าม commit |
+| `tests/verify-all.js` | ชุดทดสอบระบบ 52 รายการ |
 | `examples/demo-security.js` | ตัวอย่างการเรียกใช้ Cloud Functions |
 
 ## การทำงานแบบ Local (ไม่บังคับ)
@@ -302,6 +340,9 @@ docker compose up
 - เปิดใช้งานผ่าน HTTPS และตั้ง `PUBLIC_SERVER_URL` เป็น URL จริง
 - จำกัด `ALLOWED_ORIGINS` เฉพาะเว็บไซต์ที่ใช้งานจริง
 - จำกัด `masterKeyIps` ให้เหลือเฉพาะเครื่องที่ต้องใช้สิทธิ์ระดับสูง
+- ตั้ง `VERIFY_USER_EMAILS=true` เมื่อตั้งค่า Mail adapter แล้ว เพื่อบังคับให้ยืนยันอีเมลก่อน login
+- ตั้ง `ALLOW_INSECURE_HTTP=false` และเปิดผ่าน HTTPS เท่านั้น
+- จำกัด `SCAN_ALLOWED_HOSTS` ให้เฉพาะเครื่องที่อนุญาตให้สแกนจริง
 - สำรองฐานข้อมูล MongoDB
 - เก็บ `.env` ไว้ใน secret manager และไม่ commit ขึ้น Git
 - หากเคยเผยแพร่ key หรือรหัสผ่านไปแล้ว ให้เปลี่ยนค่าเหล่านั้นทันที
@@ -313,6 +354,8 @@ docker compose up
 | `main` | โปรเจกต์รวม MongoDB และ Parse Server | ใช้ติดตั้งและใช้งานจริง |
 | `feat/app` | โค้ดแอป, package, tests และ Dockerfile | ใช้ดูเฉพาะส่วนแอป |
 | `feat/db` | `.gitignore` และ MongoDB Compose | ใช้ดูเฉพาะส่วนฐานข้อมูล |
+
+โค้ด Incident Management ถูก merge เข้า `main` แล้ว ถ้ามี branch อื่นที่ยังไม่ได้รวม ให้ตรวจด้วย `git branch -a` ก่อนตัดสินใจว่าจะ merge หรือลบ
 
 สำหรับการพัฒนา feature ใหม่ ให้เริ่มจาก `main` แล้วสร้าง branch ใหม่:
 

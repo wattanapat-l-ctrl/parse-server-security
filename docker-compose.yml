@@ -39,6 +39,7 @@ services:
       HOST: 0.0.0.0
       SERVER_PORT: 1337
       DATABASE_URI: "mongodb://${MONGO_USERNAME:-security_user}:${MONGO_PASSWORD:-security_pass}@mongodb:27017/${MONGO_DB:-securitydb}?authSource=admin"
+      NODE_ENV: production
     depends_on:
       mongodb:
         condition: service_healthy

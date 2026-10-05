@@ -10,6 +10,8 @@ const APP_ID = process.env.APP_ID;
 const REST = process.env.REST_API_KEY;
 const MASTER = process.env.MASTER_KEY;
 
+const SECURITY_ROLE = 'SecurityAnalyst';
+
 const results = [];
 
 function check(name, pass, detail) {
@@ -138,6 +140,96 @@ async function main() {
   r = await req('/classes/SecurityLog?order=-createdAt&limit=5', { key: 'master' });
   check('query SecurityLog (audit log) (master)', r.ok && Array.isArray(r.data.results) && r.data.results.length > 0, `count=${r.data.results?.length}`);
 
+  // ---------- Incident Management ----------
+  r = await req('/functions/createIncident', { method: 'POST', key: 'master',
+    body: { alertId, title: 'verify incident', description: 'created by verify-all' } });
+  const incidentId = r.ok ? r.data.result.id : null;
+  check('createIncident (masterKey)', r.ok && !!incidentId, `${r.status} ${incidentId || r.data.error || ''}`);
+
+  r = await req('/functions/createIncident', { method: 'POST', key: 'master', body: { alertId } });
+  check('createIncident ซ้ำจาก Alert เดิมถูกบล็อก', !r.ok, `${r.status} ${r.data.code || ''}:${r.data.error || ''}`);
+
+  r = await req('/functions/assignIncident', { method: 'POST', key: 'master',
+    body: { incidentId, assignedTo: userA?.objectId } });
+  check('assignIncident', r.ok && r.data.result.assignedTo === userA?.objectId, `${r.status} ${r.data.error || ''}`);
+
+  r = await req('/functions/addIncidentNote', { method: 'POST', key: 'master',
+    body: { incidentId, note: 'note จาก verify-all' } });
+  check('addIncidentNote', r.ok && Array.isArray(r.data.result.notes), `${r.status} ${r.data.error || ''}`);
+
+  r = await req('/functions/addIncidentNote', { method: 'POST', key: 'master',
+    body: { incidentId, note: 'x'.repeat(5000) } });
+  check('addIncidentNote ที่ยาวเกินลิมิตถูกบล็อก', !r.ok, `${r.status} ${r.data.error || ''}`);
+
+  r = await req('/functions/updateIncidentStatus', { method: 'POST', key: 'master',
+    body: { incidentId, status: 'resolved' } });
+  check('updateIncidentStatus -> resolved', r.ok && r.data.result.status === 'resolved', r.data.result?.status || r.status);
+
+  r = await req('/functions/updateIncidentStatus', { method: 'POST', key: 'master',
+    body: { incidentId, status: 'closed' } });
+  check('updateIncidentStatus ที่ status ผิดถูกบล็อก', !r.ok, `${r.status} ${r.data.error || ''}`);
+
+  r = await req('/classes/SecurityIncident?limit=5', { session: sessionA });
+  check('query SecurityIncident ด้วย session ที่ไม่มี role ถูกบล็อก', !r.ok, `${r.status} ${r.data.code || ''}`);
+
+  r = await req('/classes/SecurityIncident?limit=5', { key: 'master' });
+  check('query SecurityIncident (master)', r.ok && Array.isArray(r.data.results), `${r.status}`);
+
+  // ---------- SecurityLog / SecurityScan ต้องอ่านด้วย master หรือ analyst เท่านั้น ----------
+  r = await req('/classes/SecurityLog?limit=5');
+  check('query SecurityLog ด้วย REST key เปล่า ๆ ถูกบล็อก', !r.ok, `${r.status} ${r.data.error || ''}`);
+
+  r = await req('/classes/SecurityScan?limit=5');
+  check('query SecurityScan ด้วย REST key เปล่า ๆ ถูกบล็อก', !r.ok, `${r.status} ${r.data.error || ''}`);
+
+  // ---------- Port scan allowlist ----------
+  r = await req('/functions/runPortScan', { method: 'POST', key: 'master',
+    body: { host: '203.0.113.10', ports: [80], timeoutMs: 300 } });
+  check('runPortScan host นอก allowlist ถูกบล็อก', !r.ok, `${r.status} ${r.data.error || ''}`);
+
+  r = await req('/functions/runPortScan', { method: 'POST', key: 'master',
+    body: { host: '127.0.0.1', ports: [] } });
+  check('runPortScan ที่ส่ง ports ว่างถูกบล็อก', !r.ok, `${r.status} ${r.data.error || ''}`);
+
+  // ---------- ป้องกันฟิลด์สิทธิ์บน _User ----------
+  r = await req(`/users/${userB?.objectId}`, { method: 'PUT', session: sessionA,
+    body: { accountLocked: false } });
+  check('user ปลดล็อกตัวเองด้วย session ถูกบล็อก', !r.ok, `${r.status} ${r.data.error || ''}`);
+
+  r = await req(`/users/${userA?.objectId}`, { method: 'PUT', session: sessionA,
+    body: { accountLocked: true } });
+  check('user ตั้ง accountLocked เองถูกบล็อก', !r.ok, `${r.status} ${r.data.error || ''}`);
+
+  r = await req(`/users/${userA?.objectId}`, { method: 'PUT', session: sessionA,
+    body: { nickname: 'ok-nickname' } });
+  check('user แก้ฟิลด์ปกติของตัวเองได้', r.ok, `${r.status} ${r.data.error || ''}`);
+
+  r = await req(`/users/${userA?.objectId}`, { method: 'GET', session: sessionA });
+  check('protectedFields ซ่อน accountLocked จาก client', r.ok && r.data.accountLocked === undefined,
+    `accountLocked=${JSON.stringify(r.data.accountLocked)}`);
+
+  // ---------- SecurityAnalyst ต้องอ่าน SecurityLog / SecurityScan ได้ ----------
+  r = await req('/functions/assignSecurityAnalystRole', { method: 'POST', key: 'master',
+    body: { userId: userA?.objectId } });
+  check('assignSecurityAnalystRole (masterKey)', r.ok && r.data.result.role === SECURITY_ROLE, `${r.status} ${r.data.error || ''}`);
+
+  r = await req('/login', { method: 'POST', body: { username: unameA, password: 'SecurePass123!' } });
+  const analystSession = r.ok ? r.data.sessionToken : null;
+  check('login A หลังได้ role', r.ok && !!analystSession, r.status);
+
+  r = await req('/classes/SecurityLog?limit=5', { session: analystSession });
+  check('query SecurityLog ด้วย session ของ analyst', r.ok && Array.isArray(r.data.results), `${r.status}`);
+
+  r = await req('/classes/SecurityScan?limit=5', { session: analystSession });
+  check('query SecurityScan ด้วย session ของ analyst', r.ok && Array.isArray(r.data.results), `${r.status}`);
+
+  r = await req('/functions/runPortScan', { method: 'POST', session: analystSession,
+    body: { host: '127.0.0.1', ports: [1337], timeoutMs: 400 } });
+  check('runPortScan ด้วย session ของ analyst', r.ok && r.data.result.status === 'completed', `${r.status} ${r.data.error || ''}`);
+
+  r = await req('/classes/SecurityAlert?limit=5', { session: analystSession });
+  check('query SecurityAlert ด้วย session ของ analyst', r.ok && Array.isArray(r.data.results), `${r.status}`);
+
   r = await root(`${process.env.SERVER_PORT || 1337}/dashboard`);
   check('Dashboard เข้าได้', r.status === 200, r.status);
 
@@ -145,8 +237,11 @@ async function main() {
   const envText = fs.existsSync(envFile)
     ? fs.readFileSync(envFile, 'utf8')
     : Object.entries(process.env).map(([key, value]) => `${key}=${value}`).join('\n');
-  const leftover = envText.split('\n').filter((l) => !l.trim().startsWith('#') && l.includes('change_me_'));
-  check('.env ไม่มีค่า placeholder (change_me_)', leftover.length === 0, leftover.join(';') || 'clean');
+  const leftover = envText
+    .split('\n')
+    .filter((l) => !l.trim().startsWith('#'))
+    .filter((l) => l.includes('change_me_') || l.includes('REPLACE_WITH'));
+  check('.env ไม่มีค่า placeholder', leftover.length === 0, leftover.join(';') || 'clean');
 
   const ratePass = await testRateLimit();
   check('Rate limit ทำงาน (429 หลังเกิน limit)', ratePass, '');

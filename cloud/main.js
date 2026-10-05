@@ -1,10 +1,18 @@
 const net = require('net');
 
-const { SECURITY_ROLE, assertSecurityAccess } = require('./access');
+const {
+  SECURITY_ROLE,
+  assertSecurityAccess,
+  isAllowedScanHost,
+  USER_PROTECTED_FIELDS,
+} = require('./access');
 
 // ============================================================
 // Helper
 // ============================================================
+
+// ค่าความเร็วสแกนพอร์ต (ควบคุมจำนวน connection ที่เปิดพร้อมกัน)
+const SCAN_CONCURRENCY = Number(process.env.SCAN_CONCURRENCY || 32);
 
 // เขียน audit log (บันทึกได้จาก cloud code เท่านั้น - client เขียนไม่ผ่าน)
 async function writeLog(event, meta = {}) {
@@ -30,6 +38,12 @@ Parse.Cloud.define('runPortScan', async (req) => {
   if (!host) throw new Parse.Error(Parse.Error.INVALID_QUERY, 'ต้องระบุ host');
   if (!Array.isArray(ports) || ports.length === 0 || ports.length > 1000) {
     throw new Parse.Error(Parse.Error.INVALID_QUERY, 'ports ต้องเป็น array (1-1000 พอร์ต)');
+  }
+  if (!isAllowedScanHost(host)) {
+    throw new Parse.Error(
+      Parse.Error.OPERATION_FORBIDDEN,
+      'สแกน host นี้ไม่ได้ (ต้องอยู่ใน SCAN_ALLOWED_HOSTS หรือเป็น loopback)'
+    );
   }
 
   const scan = new Parse.Object('SecurityScan');
@@ -57,11 +71,16 @@ Parse.Cloud.define('runPortScan', async (req) => {
     });
   }
 
-  const results = [];
-  for (const p of ports) {
-    const open = await checkPort(p);
-    results.push({ port: p, status: open ? 'open' : 'closed' });
-  }
+  // สแกนพร้อมกันเป็นกลุ่ม จำกัดจำนวน connection ต่อครั้งด้วย SCAN_CONCURRENCY
+  const results = new Array(ports.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(SCAN_CONCURRENCY, ports.length) }, async () => {
+    while (cursor < ports.length) {
+      const index = cursor++;
+      results[index] = { port: ports[index], status: (await checkPort(ports[index])) ? 'open' : 'closed' };
+    }
+  });
+  await Promise.all(workers);
 
   const openPorts = results.filter((r) => r.status === 'open');
   const severity = openPorts.length === 0
@@ -148,9 +167,12 @@ Parse.Cloud.define('assignSecurityAnalystRole', async (req) => {
 Parse.Cloud.define('getSecurityReport', async (req) => {
   await assertSecurityAccess(req);
 
+  // จำกัดจำนวนที่นับ เพื่อไม่ให้ query กิน memory เมื่อมี alert สะสมเยอะ
+  const reportLimit = Number(process.env.REPORT_ALERT_LIMIT || 1000);
   const alertQuery = new Parse.Query('SecurityAlert');
   alertQuery.select('severity', 'status');
-  const alerts = await alertQuery.find({ useMasterKey: true });
+  alertQuery.ascending('createdAt');
+  const alerts = await alertQuery.limit(reportLimit).find({ useMasterKey: true });
 
   const bySeverity = { critical: 0, high: 0, medium: 0, low: 0 };
   const byStatus = { open: 0, in_progress: 0, resolved: 0 };
@@ -265,12 +287,22 @@ Parse.Cloud.beforeSave(Parse.User, async (request) => {
   if (request.master) {
     return request.object;
   }
-  // สมัครผู้ใช้ใหม่ — อนุญาต
+  // สมัครผู้ใช้ใหม่ — อนุญาต แต่ตัดฟิลด์ที่ควรควบคุมโดยระบบทิ้ง
   if (request.original == null) {
+    for (const field of USER_PROTECTED_FIELDS) request.object.unset(field);
     return request.object;
   }
   // แก้ user ที่มีอยู่ — ต้องเป็นเจ้าของตัวเอง
   if (request.user && request.original && request.original.id === request.user.id) {
+    // ผู้ใช้ห้ามยกระดับสิทธิ์หรือปลดล็อกตัวเอง — ฟิลด์เหล่านี้ต้องใช้ masterKey
+    for (const field of USER_PROTECTED_FIELDS) {
+      if (request.object.dirty(field)) {
+        throw new Parse.Error(
+          Parse.Error.OPERATION_FORBIDDEN,
+          `เปลี่ยนฟิลด์ ${field} ไม่ได้ด้วยตัวเอง`
+        );
+      }
+    }
     return request.object;
   }
   throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'แก้ข้อมูลคนอื่นไม่ได้ (เฉพาะเจ้าของหรือ masterKey)');
@@ -292,6 +324,13 @@ Parse.Cloud.beforeSave('SecurityLog', (req) => {
 Parse.Cloud.afterSave('SecurityLog', async (req) => {
   console.log(`[AUDIT] ${req.object.get('event')}`, JSON.stringify(req.object.get('meta') || {}));
 });
+// SecurityLog: อ่านได้เฉพาะ masterKey หรือ role SecurityAnalyst
+// ถ้าไม่ติดกฎนี้ client ที่มี REST key จะอ่าน audit log ของทั้งระบบได้
+Parse.Cloud.beforeFind('SecurityLog', async (req) => {
+  if (req.master) return {};
+  await assertSecurityAccess(req);
+  return {};
+});
 
 // SecurityAlert: client อ่านได้เฉพาะ alert ที่เกี่ยวกับตัวเอง + เขียนไม่ได้
 Parse.Cloud.beforeSave('SecurityAlert', (req) => {
@@ -311,6 +350,11 @@ Parse.Cloud.beforeFind('SecurityAlert', (req) => {
 Parse.Cloud.beforeSave('SecurityScan', (req) => {
   if (req.master) return req.object;
   throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'scan สร้างผ่าน cloud function เท่านั้น');
+});
+Parse.Cloud.beforeFind('SecurityScan', async (req) => {
+  if (req.master) return {};
+  await assertSecurityAccess(req);
+  return {};
 });
 
 // SecurityIncident: อ่านและเขียนได้เฉพาะ masterKey หรือ role SecurityAnalyst
