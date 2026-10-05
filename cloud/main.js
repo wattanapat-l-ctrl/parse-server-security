@@ -332,3 +332,67 @@ Parse.Cloud.beforeSave('SecurityScan', (req) => {
 
 console.log('✔ Cloud Code (security) โหลดเรียบร้อย');
 require('./incidents');
+Parse.Cloud.define('registerUser', async (request) => {
+  const username = String(request.params.username || '').trim();
+  const password = String(request.params.password || '');
+
+  if (username.length < 4) {
+    throw new Parse.Error(
+      Parse.Error.VALIDATION_ERROR,
+      'Username ต้องมีอย่างน้อย 4 ตัวอักษร'
+    );
+  }
+
+  if (password.length < 8) {
+    throw new Parse.Error(
+      Parse.Error.VALIDATION_ERROR,
+      'Password ต้องมีอย่างน้อย 8 ตัวอักษร'
+    );
+  }
+
+  // ตรวจ username ซ้ำ
+  const existingUser = await new Parse.Query(Parse.User)
+    .equalTo('username', username)
+    .first({ useMasterKey: true });
+
+  if (existingUser) {
+    throw new Parse.Error(
+      Parse.Error.USERNAME_TAKEN,
+      'Username นี้มีผู้ใช้งานแล้ว'
+    );
+  }
+
+  // สร้าง User
+  const user = new Parse.User();
+
+  user.set('username', username);
+  user.set('password', password);
+
+  await user.signUp(null, {
+    useMasterKey: true
+  });
+
+  return {
+    success: true,
+    userId: user.id,
+    username: user.get('username')
+  };
+});
+Parse.Cloud.define('getSecurityAlerts', async () => {
+  const query = new Parse.Query('SecurityAlert')
+
+  query.descending('createdAt')
+  query.limit(100)
+
+  const alerts = await query.find({
+    useMasterKey: true
+  })
+
+  return alerts.map((alert) => ({
+    id: alert.id,
+    title: alert.get('title') || 'Untitled Alert',
+    severity: alert.get('severity') || 'unknown',
+    details: alert.get('details') || '',
+    createdAt: alert.createdAt
+  }))
+})

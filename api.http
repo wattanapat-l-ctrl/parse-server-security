@@ -336,3 +336,12 @@ X-Parse-Session-Token: {{loginAnalyst.response.body.sessionToken}}
 {}
 
 ###
+### Create user for Security Management Web
+POST http://localhost:1337/parse/users
+X-Parse-Application-Id: security-app
+Content-Type: application/json
+
+{
+  "username": "security_admin",
+  "password": "Security@2026Test"
+}
