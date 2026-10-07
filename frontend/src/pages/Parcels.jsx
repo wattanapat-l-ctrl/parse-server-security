@@ -7,30 +7,32 @@ function Parcels() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  async function fetchParcels() {
+    const Parcel = Parse.Object.extend('Parcel')
+    const query = new Parse.Query(Parcel)
+
+    query.descending('createdAt')
+
+    const results = await query.find()
+
+    return results.map((parcel) => ({
+      id: parcel.id,
+      trackingNumber: parcel.get('trackingNumber'),
+      recipientName: parcel.get('recipientName'),
+      roomNumber: parcel.get('roomNumber'),
+      courier: parcel.get('courier'),
+      receivedDate: parcel.get('receivedDate'),
+      status: parcel.get('status'),
+      notes: parcel.get('notes'),
+    }))
+  }
+
   async function loadParcels() {
     setLoading(true)
     setError('')
 
     try {
-      const Parcel = Parse.Object.extend('Parcel')
-      const query = new Parse.Query(Parcel)
-
-      query.descending('createdAt')
-
-      const results = await query.find()
-
-      setParcels(
-        results.map((parcel) => ({
-          id: parcel.id,
-          trackingNumber: parcel.get('trackingNumber'),
-          recipientName: parcel.get('recipientName'),
-          roomNumber: parcel.get('roomNumber'),
-          courier: parcel.get('courier'),
-          receivedDate: parcel.get('receivedDate'),
-          status: parcel.get('status'),
-          notes: parcel.get('notes'),
-        }))
-      )
+      setParcels(await fetchParcels())
     } catch (err) {
       console.error('LOAD PARCEL ERROR:', err)
       setError(err?.message || 'Unable to load parcels')
@@ -40,7 +42,18 @@ function Parcels() {
   }
 
   useEffect(() => {
-    loadParcels()
+    async function initialLoad() {
+      try {
+        setParcels(await fetchParcels())
+      } catch (err) {
+        console.error('LOAD PARCEL ERROR:', err)
+        setError(err?.message || 'Unable to load parcels')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    initialLoad()
   }, [])
 
   async function markReceived(id) {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import Parse from '../lib/parse'
 
 function Login() {
@@ -107,6 +107,13 @@ function Login() {
           </button>
 
         </form>
+
+        <div className="register-link">
+          Don't have an account?{' '}
+          <Link to="/register">
+            Create Account
+          </Link>
+        </div>
 
         <div className="login-footer">
           Parse Server Security

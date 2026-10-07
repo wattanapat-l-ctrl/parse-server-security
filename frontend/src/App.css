@@ -554,6 +554,7 @@ button {
   font-size: 14px;
   outline: none;
   background: #ffffff;
+  color: #172033;
 }
 
 .form-group input:focus {
@@ -658,6 +659,7 @@ button {
   border: 1px solid #d8e0eb;
   border-radius: 8px;
   background: #ffffff;
+  color: #172033;
   font-family: inherit;
   font-size: 14px;
   outline: none;
